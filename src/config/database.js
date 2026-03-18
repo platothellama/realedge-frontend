@@ -1,13 +1,34 @@
 const { Sequelize } = require('sequelize');
 require('dotenv').config();
 
-const sequelize = new Sequelize(
-  process.env.DB_DATABASE || 'realestate_db',
-  process.env.DB_USERNAME || 'root',
-  process.env.DB_PASSWORD || process.env.DB_ROOT_PASSWORD || '',
-  {
+let dbConfig;
+
+if (process.env.DATABASE_URL) {
+  const url = new URL(process.env.DATABASE_URL);
+  dbConfig = {
+    database: url.pathname.slice(1),
+    username: url.username,
+    password: url.password,
+    host: url.hostname,
+    port: url.port || 3306,
+  };
+} else {
+  dbConfig = {
+    database: process.env.DB_DATABASE || process.env.DB_NAME || 'railway',
+    username: process.env.DB_USERNAME || 'root',
+    password: process.env.DB_PASSWORD || '',
     host: process.env.DB_HOST || 'localhost',
     port: process.env.DB_PORT || 3306,
+  };
+}
+
+const sequelize = new Sequelize(
+  dbConfig.database,
+  dbConfig.username,
+  dbConfig.password,
+  {
+    host: dbConfig.host,
+    port: dbConfig.port,
     dialect: 'mysql',
     logging: process.env.NODE_ENV === 'development' ? console.log : false,
     dialectOptions: {
