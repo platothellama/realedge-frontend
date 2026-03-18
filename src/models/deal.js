@@ -1,0 +1,51 @@
+const { DataTypes } = require('sequelize');
+const { sequelize } = require('../config/database');
+
+const Deal = sequelize.define('Deal', {
+  id: {
+    type: DataTypes.UUID,
+    defaultValue: DataTypes.UUIDV4,
+    primaryKey: true
+  },
+  title: {
+    type: DataTypes.STRING,
+    allowNull: false
+  },
+  buyerName: {
+    type: DataTypes.STRING,
+    allowNull: false
+  },
+  sellerName: {
+    type: DataTypes.STRING,
+    allowNull: false
+  },
+  commission: {
+    type: DataTypes.DECIMAL(15, 2),
+    allowNull: false,
+    defaultValue: 0
+  },
+  dealStage: {
+    type: DataTypes.ENUM('Offer Made', 'Negotiation', 'Contract Signed', 'Payment', 'Closed'),
+    defaultValue: 'Offer Made'
+  },
+  notes: {
+    type: DataTypes.TEXT,
+    allowNull: true
+  },
+  propertyId: {
+    type: DataTypes.UUID,
+    allowNull: false
+  },
+  brokerId: {
+    type: DataTypes.UUID,
+    allowNull: false
+  },
+  buyerLeadId: {
+    type: DataTypes.UUID,
+    allowNull: true
+  }
+}, {
+  timestamps: true
+});
+
+module.exports = Deal;

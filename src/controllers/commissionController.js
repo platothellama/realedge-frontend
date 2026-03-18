@@ -1,0 +1,157 @@
+const { Commission, Deal, Property, User } = require('../models/associations');
+
+exports.getCommissions = async (req, res) => {
+  try {
+    const { status, agentId } = req.query;
+    let where = {};
+    if (status) where.status = status;
+    if (agentId) where.agentId = agentId;
+
+    const commissions = await Commission.findAll({
+      where,
+      include: [
+        { model: Deal, as: 'deal', attributes: ['id', 'title'] },
+        { model: Property, as: 'property', attributes: ['id', 'title'] },
+        { model: User, as: 'agent', attributes: ['id', 'name', 'photo'] }
+      ],
+      order: [['createdAt', 'DESC']]
+    });
+
+    res.status(200).json(commissions);
+  } catch (error) {
+    res.status(500).json({ message: 'Error fetching commissions', error: error.message });
+  }
+};
+
+exports.calculateCommission = async (req, res) => {
+  try {
+    const { dealId, agentSharePercentage } = req.body;
+
+    const deal = await Deal.findByPk(dealId, {
+      include: [{ model: Property, as: 'property' }]
+    });
+    
+    if (!deal) return res.status(404).json({ message: 'Deal not found' });
+
+    const salePrice = deal.finalPrice;
+    const commissionPercentage = deal.commission || 2;
+    const grossCommission = salePrice * (commissionPercentage / 100);
+    const agentShare = agentSharePercentage || 60;
+    const agentCommission = grossCommission * (agentShare / 100);
+    const officeCommission = grossCommission - agentCommission;
+
+    res.status(200).json({
+      salePrice,
+      commissionPercentage,
+      grossCommission,
+      agentSharePercentage: agentShare,
+      agentCommission,
+      officeCommission
+    });
+  } catch (error) {
+    res.status(500).json({ message: 'Error calculating commission', error: error.message });
+  }
+};
+
+exports.createCommission = async (req, res) => {
+  try {
+    const { dealId, agentId, salePrice, commissionPercentage, agentSharePercentage } = req.body;
+
+    const grossCommission = salePrice * (commissionPercentage / 100);
+    const agentShare = agentSharePercentage || 60;
+    const agentCommission = grossCommission * (agentShare / 100);
+    const officeCommission = grossCommission - agentCommission;
+
+    const commission = await Commission.create({
+      dealId,
+      agentId,
+      propertyId: req.body.propertyId,
+      salePrice,
+      commissionPercentage,
+      grossCommission,
+      agentSharePercentage: agentShare,
+      agentCommission,
+      officeCommission,
+      status: 'pending'
+    });
+
+    res.status(201).json(commission);
+  } catch (error) {
+    res.status(400).json({ message: 'Error creating commission', error: error.message });
+  }
+};
+
+exports.updateCommissionStatus = async (req, res) => {
+  try {
+    const commission = await Commission.findByPk(req.params.id);
+    if (!commission) return res.status(404).json({ message: 'Commission not found' });
+
+    const { status, paidAmount } = req.body;
+    
+    if (status === 'paid' && paidAmount) {
+      await commission.update({
+        status,
+        paidAmount: commission.paidAmount + paidAmount,
+        paidAt: new Date()
+      });
+    } else {
+      await commission.update({ status });
+    }
+
+    res.status(200).json(commission);
+  } catch (error) {
+    res.status(400).json({ message: 'Error updating commission', error: error.message });
+  }
+};
+
+exports.getCommissionStats = async (req, res) => {
+  try {
+    const { Op } = require('sequelize');
+    
+    const [totalPending, totalApproved, totalPaid, pendingCount, approvedCount, paidCount] = await Promise.all([
+      Commission.sum('agentCommission', { where: { status: 'pending' } }),
+      Commission.sum('agentCommission', { where: { status: 'approved' } }),
+      Commission.sum('agentCommission', { where: { status: { [Op.in]: ['paid', 'disbursed'] } } }),
+      Commission.count({ where: { status: 'pending' } }),
+      Commission.count({ where: { status: 'approved' } }),
+      Commission.count({ where: { status: { [Op.in]: ['paid', 'disbursed'] } } })
+    ]);
+
+    const byAgent = await Commission.findAll({
+      where: { status: { [Op.in]: ['paid', 'disbursed'] } },
+      include: [{ model: User, as: 'agent', attributes: ['id', 'name'] }],
+      attributes: ['agentId', [require('sequelize').fn('SUM', require('sequelize').col('agentCommission')), 'total']],
+      group: ['agentId', 'agent.id']
+    });
+
+    const byStatus = await Commission.findAll({
+      attributes: ['status', [require('sequelize').fn('COUNT', require('sequelize').col('id')), 'count'], [require('sequelize').fn('SUM', require('sequelize').col('agentCommission')), 'total']],
+      group: ['status']
+    });
+
+    const thisMonth = new Date();
+    thisMonth.setDate(1);
+    thisMonth.setHours(0, 0, 0, 0);
+    
+    const thisMonthPaid = await Commission.sum('agentCommission', { 
+      where: { 
+        status: { [Op.in]: ['paid', 'disbursed'] },
+        paidAt: { [Op.gte]: thisMonth }
+      }
+    }) || 0;
+
+    res.status(200).json({
+      totalPending: totalPending || 0,
+      totalApproved: totalApproved || 0,
+      totalPaid: totalPaid || 0,
+      pendingCount: pendingCount || 0,
+      approvedCount: approvedCount || 0,
+      paidCount: paidCount || 0,
+      thisMonthPaid,
+      byAgent: byAgent.map(a => ({ agentId: a.agentId, agentName: a.agent?.name, total: Number(a.dataValues.total) })),
+      byStatus: byStatus.map(s => ({ status: s.status, count: Number(s.dataValues.count), total: Number(s.dataValues.total) }))
+    });
+  } catch (error) {
+    res.status(500).json({ message: 'Error fetching commission stats', error: error.message });
+  }
+};
