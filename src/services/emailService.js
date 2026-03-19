@@ -97,14 +97,14 @@ class EmailService {
   }
 
   injectTrackingPixels(html, trackingId) {
-    const trackingUrl = `${process.env.API_URL || 'http://localhost:8000'}/api/track/open/${trackingId}`;
+    const trackingUrl = `${process.env.API_URL || 'https://realedge-frontend-production.up.railway.app/'}/api/track/open/${trackingId}`;
     const trackingPixel = `<img src="${trackingUrl}" width="1" height="1" style="display:none" alt="" />`;
     
     return html + trackingPixel;
   }
 
   wrapLinksWithTracking(html, trackingId) {
-    const baseUrl = process.env.API_URL || 'http://localhost:8000';
+    const baseUrl = process.env.API_URL || 'https://realedge-frontend-production.up.railway.app/';
     const wrappedHtml = html.replace(
       /href=["'](https?:\/\/[^"']+)["']/g,
       `href="${baseUrl}/api/track/click/${trackingId}?url=$1"`

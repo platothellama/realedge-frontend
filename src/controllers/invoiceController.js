@@ -32,11 +32,13 @@ exports.createInvoice = async (req, res) => {
   try {
     const invoiceData = { ...req.body };
     
-    // Generate invoice number
     const count = await Invoice.count() + 1;
     invoiceData.invoiceNumber = `INV-${new Date().getFullYear()}-${count.toString().padStart(4, '0')}`;
     
-    // Calculate totals
+    if (invoiceData.lineItems && Array.isArray(invoiceData.lineItems)) {
+      invoiceData.subtotal = invoiceData.lineItems.reduce((sum, item) => sum + (Number(item.total) || 0), 0);
+    }
+    
     invoiceData.taxAmount = invoiceData.subtotal * (invoiceData.taxRate / 100);
     invoiceData.total = invoiceData.subtotal + invoiceData.taxAmount - (invoiceData.discount || 0);
 
@@ -52,7 +54,15 @@ exports.updateInvoice = async (req, res) => {
     const invoice = await Invoice.findByPk(req.params.id);
     if (!invoice) return res.status(404).json({ message: 'Invoice not found' });
 
-    await invoice.update(req.body);
+    const updateData = { ...req.body };
+    
+    if (updateData.lineItems && Array.isArray(updateData.lineItems)) {
+      updateData.subtotal = updateData.lineItems.reduce((sum, item) => sum + (Number(item.total) || 0), 0);
+      updateData.taxAmount = updateData.subtotal * (updateData.taxRate / 100);
+      updateData.total = updateData.subtotal + updateData.taxAmount - (updateData.discount || 0);
+    }
+
+    await invoice.update(updateData);
     res.status(200).json(invoice);
   } catch (error) {
     res.status(500).json({ message: 'Error updating invoice', error: error.message });
