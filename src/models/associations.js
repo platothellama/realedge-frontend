@@ -114,6 +114,9 @@ Deal.hasMany(Document, { foreignKey: 'dealId', as: 'documents' });
 Document.hasMany(DocumentVersion, { foreignKey: 'documentId', as: 'versions' });
 DocumentVersion.belongsTo(Document, { foreignKey: 'documentId' });
 
+// DocumentVersion - User Relation
+DocumentVersion.belongsTo(User, { foreignKey: 'uploadedByUserId', as: 'uploader' });
+
 // Notification - User Relation
 Notification.belongsTo(User, { foreignKey: 'userId', as: 'user' });
 User.hasMany(Notification, { foreignKey: 'userId', as: 'notifications' });
