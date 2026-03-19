@@ -12,7 +12,6 @@ exports.getStats = async (req, res) => {
     let propertyWhere = {};
     let commissionWhere = {};
     let expenseWhere = {};
-    let invoiceWhere = {};
 
     if (userRole && userRole !== 'Super Admin' && userRole !== 'Admin') {
       leadWhere = { assignedToUserId: userId };
@@ -23,8 +22,6 @@ exports.getStats = async (req, res) => {
 
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-    const endOfLastMonth = new Date(now.getFullYear(), now.getMonth(), 0);
 
     const [
       totalProperties,
@@ -37,10 +34,10 @@ exports.getStats = async (req, res) => {
       hotLeads,
       pendingCommissions,
       thisMonthRevenue,
-      propertyByStatus,
-      propertyByType,
-      leadBySource,
-      leadByStatus
+      propertyStatusCounts,
+      propertyTypeCounts,
+      leadSourceCounts,
+      leadStatusCounts
     ] = await Promise.all([
       Property.count({ where: propertyWhere }),
       Lead.count({ where: leadWhere }),
@@ -50,19 +47,19 @@ exports.getStats = async (req, res) => {
         where: propertyWhere,
         order: [['createdAt', 'DESC']],
         limit: 5,
-        attributes: ['id', 'title', 'status', 'price', 'createdAt', 'type', 'city']
+        attributes: ['id', 'title', 'price', 'createdAt', 'type', 'city']
       }),
       Lead.findAll({
         where: leadWhere,
         order: [['createdAt', 'DESC']],
         limit: 5,
-        attributes: ['id', 'name', 'status', 'source', 'createdAt', 'phone']
+        attributes: ['id', 'name', 'source', 'createdAt', 'phone']
       }),
       Deal.findAll({
         where: dealWhere,
         order: [['createdAt', 'DESC']],
         limit: 5,
-        attributes: ['id', 'title', 'dealStage', 'commission', 'createdAt', 'status']
+        attributes: ['id', 'title', 'dealStage', 'commission', 'createdAt']
       }),
       Lead.count({ where: { ...leadWhere, status: 'Hot' } }),
       Commission.sum('agentCommission', { where: { ...commissionWhere, status: 'pending' } }),
@@ -73,46 +70,46 @@ exports.getStats = async (req, res) => {
           closedAt: { [Op.gte]: startOfMonth }
         }
       }),
-      sequelize.query(`
-        SELECT status, COUNT(*) as count 
-        FROM Properties 
-        ${userRole && userRole !== 'Super Admin' && userRole !== 'Admin' ? `WHERE assignedToUserId = '${userId}'` : ''}
-        GROUP BY status
-      `, { type: sequelize.QueryTypes.SELECT }),
-      sequelize.query(`
-        SELECT type, COUNT(*) as count 
-        FROM Properties 
-        ${userRole && userRole !== 'Super Admin' && userRole !== 'Admin' ? `WHERE assignedToUserId = '${userId}'` : ''}
-        GROUP BY type
-      `, { type: sequelize.QueryTypes.SELECT }),
-      sequelize.query(`
-        SELECT source, COUNT(*) as count 
-        FROM Leads 
-        ${userRole && userRole !== 'Super Admin' && userRole !== 'Admin' ? `WHERE assignedToUserId = '${userId}'` : ''}
-        GROUP BY source
-      `, { type: sequelize.QueryTypes.SELECT }),
-      sequelize.query(`
-        SELECT status, COUNT(*) as count 
-        FROM Leads 
-        ${userRole && userRole !== 'Super Admin' && userRole !== 'Admin' ? `WHERE assignedToUserId = '${userId}'` : ''}
-        GROUP BY status
-      `, { type: sequelize.QueryTypes.SELECT })
+      Property.findAll({
+        where: propertyWhere,
+        attributes: ['status', [sequelize.fn('COUNT', sequelize.col('status')), 'count']],
+        group: ['status']
+      }),
+      Property.findAll({
+        where: propertyWhere,
+        attributes: ['type', [sequelize.fn('COUNT', sequelize.col('type')), 'count']],
+        group: ['type']
+      }),
+      Lead.findAll({
+        where: leadWhere,
+        attributes: ['source', [sequelize.fn('COUNT', sequelize.col('source')), 'count']],
+        group: ['source']
+      }),
+      Lead.findAll({
+        where: leadWhere,
+        attributes: ['status', [sequelize.fn('COUNT', sequelize.col('status')), 'count']],
+        group: ['status']
+      })
     ]);
 
     const totalRevenue = await Deal.sum('commission', { where: { ...dealWhere, dealStage: 'Closed' } }) || 0;
     const totalExpenses = await Expense.sum('amount', { where: expenseWhere }) || 0;
 
-    const monthlyStats = await sequelize.query(`
-      SELECT 
-        DATE_FORMAT(closedAt, '%Y-%m') as month,
-        SUM(commission) as revenue
-      FROM Deals
-      WHERE dealStage = 'Closed' AND closedAt IS NOT NULL
-      ${userRole && userRole !== 'Super Admin' && userRole !== 'Admin' ? `AND brokerId = '${userId}'` : ''}
-      GROUP BY DATE_FORMAT(closedAt, '%Y-%m')
-      ORDER BY month DESC
-      LIMIT 6
-    `, { type: sequelize.QueryTypes.SELECT });
+    const monthlyStats = await Deal.findAll({
+      where: {
+        ...dealWhere,
+        dealStage: 'Closed',
+        closedAt: { [Op.ne]: null }
+      },
+      attributes: [
+        [sequelize.fn('DATE_FORMAT', sequelize.col('closedAt'), '%Y-%m'), 'month'],
+        [sequelize.fn('SUM', sequelize.col('commission')), 'revenue']
+      ],
+      group: [sequelize.fn('DATE_FORMAT', sequelize.col('closedAt'), '%Y-%m')],
+      order: [[sequelize.fn('DATE_FORMAT', sequelize.col('closedAt'), '%Y-%m'), 'DESC']],
+      limit: 6,
+      raw: true
+    });
 
     const topAgents = await User.findAll({
       where: { role: { [Op.in]: ['Broker', 'Agent'] }, active: true },
@@ -135,22 +132,22 @@ exports.getStats = async (req, res) => {
         netProfit: totalRevenue - totalExpenses
       },
       charts: {
-        propertyByStatus: propertyByStatus.map(p => ({
+        propertyByStatus: propertyStatusCounts.map(p => ({
           label: p.status || 'Unknown',
           value: parseInt(p.count),
           color: getStatusColor(p.status)
         })),
-        propertyByType: propertyByType.map(p => ({
+        propertyByType: propertyTypeCounts.map(p => ({
           label: p.type || 'Unknown',
           value: parseInt(p.count),
           color: getTypeColor(p.type)
         })),
-        leadBySource: leadBySource.map(l => ({
+        leadBySource: leadSourceCounts.map(l => ({
           label: l.source || 'Other',
           value: parseInt(l.count),
           color: getSourceColor(l.source)
         })),
-        leadByStatus: leadByStatus.map(l => ({
+        leadByStatus: leadStatusCounts.map(l => ({
           label: l.status || 'Unknown',
           value: parseInt(l.count),
           color: getLeadStatusColor(l.status)

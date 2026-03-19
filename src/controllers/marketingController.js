@@ -46,7 +46,7 @@ exports.generateMarketingContent = async (req, res) => {
     }
 
     const response = await openai.chat.completions.create({
-      model: "gpt-3.5-turbo",
+      model: "gpt-5-nano",
       messages: [
         { role: "system", content: "You are a professional real estate marketing expert." },
         { role: "user", content: prompt }

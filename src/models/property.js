@@ -27,8 +27,6 @@ const Property = sequelize.define('Property', {
     type: DataTypes.ENUM('Apartment', 'House', 'Villa', 'Office', 'Land', 'Commercial'),
     defaultValue: 'Apartment'
   },
-  
-  // Property Details
   bedrooms: {
     type: DataTypes.INTEGER,
     defaultValue: 0
@@ -38,7 +36,7 @@ const Property = sequelize.define('Property', {
     defaultValue: 0
   },
   area: {
-    type: DataTypes.FLOAT, // Square meters/feet
+    type: DataTypes.FLOAT,
     defaultValue: 0
   },
   lotSize: {
@@ -53,8 +51,6 @@ const Property = sequelize.define('Property', {
     type: DataTypes.INTEGER,
     defaultValue: 0
   },
-
-  // Location
   address: {
     type: DataTypes.STRING,
     allowNull: false
@@ -75,8 +71,6 @@ const Property = sequelize.define('Property', {
     type: DataTypes.FLOAT,
     allowNull: true
   },
-
-  // Media (JSON arrays)
   photos: {
     type: DataTypes.JSON,
     defaultValue: []
@@ -93,8 +87,10 @@ const Property = sequelize.define('Property', {
     type: DataTypes.JSON,
     defaultValue: []
   },
-
-  // Assignments
+  features: {
+    type: DataTypes.JSON,
+    defaultValue: []
+  },
   assignedToUserId: {
     type: DataTypes.UUID,
     allowNull: true
@@ -108,8 +104,6 @@ const Property = sequelize.define('Property', {
     defaultValue: 0,
     allowNull: false
   },
-  
-  // Analytics
   views: {
     type: DataTypes.INTEGER,
     defaultValue: 0
@@ -129,12 +123,6 @@ const Property = sequelize.define('Property', {
   marketValue: {
     type: DataTypes.DECIMAL(15, 2),
     allowNull: true
-  }
-}, {
-  // Property Features (additional)
-  features: {
-    type: DataTypes.JSON, 
-    defaultValue: []
   }
 }, {
   timestamps: true

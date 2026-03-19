@@ -605,7 +605,7 @@ exports.matchPropertiesToBuyer = async (req, res) => {
         ).join('\n');
 
         const completion = await openai.chat.completions.create({
-          model: 'gpt-3.5-turbo',
+          model: 'gpt-5-nano',
           messages: [{
             role: 'system',
             content: 'You are a real estate AI assistant. Explain why properties match buyer requirements in a concise, helpful way.'
@@ -850,7 +850,7 @@ exports.explainMatch = async (req, res) => {
     if (process.env.OPENAI_API_KEY) {
       try {
         const completion = await openai.chat.completions.create({
-          model: 'gpt-3.5-turbo',
+          model: 'gpt-5-nano',
           messages: [{
             role: 'system',
             content: 'You are a real estate AI assistant. Explain why a property matches buyer requirements in 2-3 sentences.'
