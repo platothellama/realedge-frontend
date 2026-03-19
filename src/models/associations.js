@@ -122,8 +122,8 @@ Notification.belongsTo(User, { foreignKey: 'userId', as: 'user' });
 User.hasMany(Notification, { foreignKey: 'userId', as: 'notifications' });
 
 // Transaction - User Relation
-Transaction.belongsTo(User, { foreignKey: 'createdByUserId', as: 'creator' });
-User.hasMany(Transaction, { foreignKey: 'createdByUserId', as: 'transactions' });
+Transaction.belongsTo(User, { foreignKey: 'userId', as: 'creator' });
+User.hasMany(Transaction, { foreignKey: 'userId', as: 'transactions' });
 
 // Commission - User Relation (Agent)
 Commission.belongsTo(User, { foreignKey: 'agentId', as: 'agent' });
