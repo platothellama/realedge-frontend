@@ -146,6 +146,7 @@ Lead.hasMany(Task, { foreignKey: 'leadId', as: 'tasks' });
 
 // Announcement Relations
 Announcement.belongsTo(User, { foreignKey: 'createdByUserId', as: 'creator' });
+Announcement.belongsTo(User, { foreignKey: 'createdByUserId', as: 'author' });
 User.hasMany(Announcement, { foreignKey: 'createdByUserId', as: 'announcements' });
 
 // Invoice Relations
