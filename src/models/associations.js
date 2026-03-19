@@ -135,6 +135,7 @@ Deal.hasMany(Commission, { foreignKey: 'dealId', as: 'commissions' });
 
 // Task - User Relation
 Task.belongsTo(User, { foreignKey: 'assignedToUserId', as: 'assignedUser' });
+Task.belongsTo(User, { foreignKey: 'assignedToUserId', as: 'assignedTo' });
 User.hasMany(Task, { foreignKey: 'assignedToUserId', as: 'tasks' });
 
 // Task - Lead Relation
