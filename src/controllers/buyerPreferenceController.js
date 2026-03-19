@@ -401,7 +401,9 @@ exports.matchPropertiesToBuyer = async (req, res) => {
     }
 
     const { Op } = require('sequelize');
-    let whereClause = { status: 'Available' };
+    let whereClause = {
+      status: { [Op.in]: ['Available', 'Reserved'] }
+    };
 
     if (preference.budgetMin || preference.budgetMax) {
       whereClause.price = {};
@@ -668,11 +670,11 @@ exports.naturalLanguageSearch = async (req, res) => {
     const semanticQuery = `${expandedQuery} ${extractedFeatures.join(' ')}`.trim();
     const buyerEmbedding = await generateEmbedding(semanticQuery);
 
-    let whereClause = { status: 'Available' };
+    const { Op } = require('sequelize');
+    let whereClause = { status: { [Op.in]: ['Available', 'Reserved'] } };
 
     if (filters || priceRange || bedrooms || bathrooms) {
-      const { Op } = require('sequelize');
-      whereClause = { status: 'Available' };
+      whereClause = { status: { [Op.in]: ['Available', 'Reserved'] } };
       
       if (priceRange?.max) {
         whereClause.price = { [Op.lte]: priceRange.max };
@@ -921,7 +923,9 @@ exports.wizardSearch = async (req, res) => {
     }
 
     const { Op } = require('sequelize');
-    let whereClause = { status: 'Available' };
+    let whereClause = {
+      status: { [Op.in]: ['Available', 'Reserved'] }
+    };
 
     if (filters.budgetMin || filters.budgetMax) {
       whereClause.price = {};
