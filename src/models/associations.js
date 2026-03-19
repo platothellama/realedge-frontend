@@ -93,6 +93,10 @@ Property.hasMany(Visit, { foreignKey: 'propertyId', as: 'visits' });
 Visit.belongsTo(Lead, { foreignKey: 'leadId', as: 'lead' });
 Lead.hasMany(Visit, { foreignKey: 'leadId', as: 'visits' });
 
+// Visit - User Relation (Broker)
+Visit.belongsTo(User, { foreignKey: 'brokerId', as: 'broker' });
+User.hasMany(Visit, { foreignKey: 'brokerId', as: 'brokerVisits' });
+
 // Document - Property Relation
 Document.belongsTo(Property, { foreignKey: 'propertyId', as: 'property' });
 Property.hasMany(Document, { foreignKey: 'propertyId', as: 'propertyDocuments' });
