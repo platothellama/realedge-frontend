@@ -1068,12 +1068,12 @@ exports.aiAssistant = async (req, res) => {
     if (isRev) {
       const [txns, comms] = await Promise.all([
         Transaction.findAll({ attributes: ['id', 'type', 'amount'] }),
-        Commission.findAll({ attributes: ['id', 'amount', 'status'] })
+        Commission.findAll({ attributes: ['id', 'agentCommission', 'status'] })
       ]);
       const income = txns.filter(t => t.type === 'income').reduce((s, t) => s + Number(t.amount || 0), 0);
       const expenses = txns.filter(t => t.type === 'expense').reduce((s, t) => s + Number(t.amount || 0), 0);
-      const pending = comms.filter(c => c.status === 'Pending').reduce((s, c) => s + Number(c.amount || 0), 0);
-      const paid = comms.filter(c => c.status === 'Paid').reduce((s, c) => s + Number(c.amount || 0), 0);
+      const pending = comms.filter(c => c.status === 'pending').reduce((s, c) => s + Number(c.agentCommission || 0), 0);
+      const paid = comms.filter(c => c.status === 'paid').reduce((s, c) => s + Number(c.agentCommission || 0), 0);
       revenueResults = { income: formatPrice(income), expenses: formatPrice(expenses), profit: formatPrice(income - expenses), pending: formatPrice(pending), paid: formatPrice(paid) };
     }
 
@@ -1082,7 +1082,7 @@ exports.aiAssistant = async (req, res) => {
     let response = '';
     const hasSpecificData = propertyResults || leadResults || dealResults || revenueResults;
     const cacheKey = getCacheKey(message, hasSpecificData);
-    const cached = getCacheKey(cacheKey, '');
+    const cached = getCached(cacheKey);
     if (cached) { response = cached; }
     else if (process.env.OPENAI_API_KEY && hasSpecificData) {
       try {
