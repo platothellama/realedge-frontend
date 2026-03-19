@@ -40,6 +40,10 @@ const Deal = sequelize.define('Deal', {
     type: DataTypes.UUID,
     allowNull: false
   },
+  finalPrice: {
+    type: DataTypes.DECIMAL(15, 2),
+    allowNull: true
+  },
   buyerLeadId: {
     type: DataTypes.UUID,
     allowNull: true

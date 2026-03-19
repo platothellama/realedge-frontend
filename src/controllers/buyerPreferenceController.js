@@ -113,11 +113,20 @@ const extractPriceRange = (query) => {
     prices.push(price);
   }
   
-  return prices.length >= 2 
-    ? { min: Math.min(...prices), max: Math.max(...prices) }
-    : prices.length === 1 
-      ? { max: prices[0] * 1.2 }
-      : null;
+  const lowerQuery = query.toLowerCase();
+  
+  if (prices.length >= 2) {
+    return { min: Math.min(...prices), max: Math.max(...prices) };
+  } else if (prices.length === 1) {
+    if (lowerQuery.includes('less') || lowerQuery.includes('under') || lowerQuery.includes('below') || lowerQuery.includes('max')) {
+      return { max: prices[0] };
+    } else if (lowerQuery.includes('more') || lowerQuery.includes('over') || lowerQuery.includes('above') || lowerQuery.includes('min')) {
+      return { min: prices[0] };
+    } else {
+      return { max: prices[0] * 1.2 };
+    }
+  }
+  return null;
 };
 
 const extractBedrooms = (query) => {
@@ -463,11 +472,14 @@ exports.matchPropertiesToBuyer = async (req, res) => {
         const maxBudget = preference.budgetMax || Number.MAX_SAFE_INTEGER;
         const midBudget = (minBudget + maxBudget) / 2;
         
-        if (Number(property.price) >= minBudget && Number(property.price) <= maxBudget) {
+        const propPrice = Number(property.price);
+        if (propPrice >= minBudget && propPrice <= maxBudget) {
           priceScore = 1;
           matchReasons.push('Within budget');
+        } else if (propPrice > maxBudget) {
+          priceScore = 0;
         } else {
-          const priceDiff = Math.abs(Number(property.price) - midBudget) / midBudget;
+          const priceDiff = Math.abs(propPrice - midBudget) / midBudget;
           priceScore = Math.max(0, 1 - priceDiff);
         }
       } else {
@@ -580,6 +592,10 @@ exports.matchPropertiesToBuyer = async (req, res) => {
     });
 
     let aiExplanation = '';
+    const budgetDisplay = preference.budgetMin || preference.budgetMax 
+      ? `${preference.budgetMin ? '$' + preference.budgetMin : '$0'} - ${preference.budgetMax ? '$' + preference.budgetMax : 'Any'}`
+      : 'Any';
+    
     if (process.env.OPENAI_API_KEY && topMatches.length > 0) {
       try {
         const top3 = topMatches.slice(0, 3).map(m => 
@@ -593,13 +609,13 @@ exports.matchPropertiesToBuyer = async (req, res) => {
             content: 'You are a real estate AI assistant. Explain why properties match buyer requirements in a concise, helpful way.'
           }, {
             role: 'user',
-            content: `Buyer Requirements:
-- Budget: ${preference.budgetMin ? '$' + preference.budgetMin : 'Any'} - ${preference.budgetMax ? '$' + preference.budgetMax : 'Any'}
+            content: `Buyer Requirements (from wizard):
+- Budget: ${budgetDisplay}
 - Type: ${preference.propertyType || 'Any'}
 - Bedrooms: ${preference.bedrooms || 'Any'}
 - Locations: ${preference.preferredLocations?.join(', ') || 'Any'}
-- Description: ${preference.description || 'None'}
 - Features: ${preference.parkingRequired ? 'Parking ' : ''}${preference.balconyRequired ? 'Balcony ' : ''}${preference.furnishedRequired ? 'Furnished ' : ''}
+- Description/Search: ${preference.description || 'None'}
 
 Top Matches:
 ${top3}

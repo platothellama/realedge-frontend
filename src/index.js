@@ -97,7 +97,7 @@ const startServer = async () => {
   
   // Sync Models
   try {
-    await sequelize.sync({ alter: false });
+    await sequelize.sync({ alter: true });
     console.log('📦 Database models synced.');
   } catch (err) {
     console.error('❌ Database sync error:', err.message);
