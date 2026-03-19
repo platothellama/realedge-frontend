@@ -14,6 +14,7 @@ router.put('/:id', buyerPreferenceController.updateBuyerPreference);
 router.delete('/:id', restrictTo('Super Admin', 'Admin'), buyerPreferenceController.deleteBuyerPreference);
 
 router.post('/:id/match', buyerPreferenceController.matchPropertiesToBuyer);
+router.post('/:id/wizard-search', buyerPreferenceController.wizardSearch);
 router.post('/search', buyerPreferenceController.naturalLanguageSearch);
 router.post('/generate-embeddings', buyerPreferenceController.generatePropertyEmbeddings);
 router.post('/explain-match', buyerPreferenceController.explainMatch);

@@ -908,3 +908,189 @@ exports.clearEmbeddingCache = async (req, res) => {
   embeddingCache.clear();
   res.status(200).json({ message: 'Embedding cache cleared', cacheSize: 0 });
 };
+
+exports.wizardSearch = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const filters = req.body;
+    
+    const preference = await BuyerPreference.findByPk(id);
+    
+    if (!preference) {
+      return res.status(404).json({ message: 'Buyer preference not found' });
+    }
+
+    const { Op } = require('sequelize');
+    let whereClause = { status: 'Available' };
+
+    if (filters.budgetMin || filters.budgetMax) {
+      whereClause.price = {};
+      if (filters.budgetMin) whereClause.price[Op.gte] = filters.budgetMin;
+      if (filters.budgetMax) whereClause.price[Op.lte] = filters.budgetMax;
+    }
+
+    if (filters.propertyType) {
+      whereClause.type = filters.propertyType;
+    }
+
+    if (filters.bedrooms) {
+      whereClause.bedrooms = { [Op.gte]: filters.bedrooms };
+    }
+
+    if (filters.bathrooms) {
+      whereClause.bathrooms = { [Op.gte]: filters.bathrooms };
+    }
+
+    if (filters.preferredLocations?.length > 0) {
+      whereClause.city = { [Op.in]: filters.preferredLocations };
+    }
+
+    if (filters.parkingRequired) {
+      whereClause.parkingSpaces = { [Op.gte]: 1 };
+    }
+
+    let properties = await Property.findAll({ where: whereClause });
+
+    const scoredProperties = await Promise.all(properties.map(async (property) => {
+      let aiSimilarity = 0;
+      let embeddingMatch = false;
+
+      const propertyEmbedding = await PropertyEmbedding.findOne({
+        where: { propertyId: property.id }
+      });
+
+      if (propertyEmbedding?.embedding) {
+        aiSimilarity = 0.5;
+        embeddingMatch = true;
+      }
+
+      const buyerText = buildBuyerText({
+        ...preference.toJSON(),
+        ...filters
+      });
+      const buyerEmbedding = await generateEmbedding(buyerText);
+
+      if (buyerEmbedding && propertyEmbedding?.embedding) {
+        aiSimilarity = cosineSimilarity(buyerEmbedding, propertyEmbedding.embedding);
+        embeddingMatch = true;
+      }
+
+      let priceScore = 1;
+      let locationScore = 1;
+      let featureScore = 1;
+      const matchReasons = [];
+
+      if (filters.budgetMin || filters.budgetMax) {
+        const minBudget = filters.budgetMin || 0;
+        const maxBudget = filters.budgetMax || Number.MAX_SAFE_INTEGER;
+        const propPrice = Number(property.price);
+        
+        if (propPrice >= minBudget && propPrice <= maxBudget) {
+          priceScore = 1;
+          matchReasons.push('Within budget');
+        } else {
+          priceScore = 0;
+        }
+      }
+
+      if (filters.preferredLocations?.length > 0) {
+        const cityMatch = filters.preferredLocations.some(loc => 
+          property.city?.toLowerCase().includes(loc.toLowerCase()) ||
+          loc.toLowerCase().includes(property.city?.toLowerCase())
+        );
+        if (cityMatch) {
+          locationScore = 1;
+          matchReasons.push(`Located in ${property.city}`);
+        } else {
+          locationScore = 0;
+        }
+      }
+
+      const propertyFeatures = Array.isArray(property.features) 
+        ? property.features.map(f => f.toLowerCase()) 
+        : [];
+      const requiredFeatures = [];
+
+      if (filters.parkingRequired) requiredFeatures.push('parking');
+      if (filters.balconyRequired) requiredFeatures.push('balcony');
+      if (filters.furnishedRequired) requiredFeatures.push('furnished');
+
+      let matchedFeatures = 0;
+      requiredFeatures.forEach(feature => {
+        if (propertyFeatures.some(pf => pf.includes(feature) || feature.includes(pf))) {
+          matchedFeatures++;
+        }
+      });
+
+      if (requiredFeatures.length > 0) {
+        featureScore = matchedFeatures / requiredFeatures.length;
+        requiredFeatures.forEach(feature => {
+          if (propertyFeatures.some(pf => pf.includes(feature) || feature.includes(pf))) {
+            const niceName = feature.charAt(0).toUpperCase() + feature.slice(1);
+            if (!matchReasons.includes(niceName)) {
+              matchReasons.push(niceName);
+            }
+          }
+        });
+      }
+
+      const weights = { ai: 0.4, price: 0.3, location: 0.2, features: 0.1 };
+      const adjustedAiScore = embeddingMatch ? aiSimilarity : 0.5;
+      const totalScore = (
+        weights.ai * adjustedAiScore +
+        weights.price * priceScore +
+        weights.location * locationScore +
+        weights.features * featureScore
+      );
+
+      return {
+        property: {
+          id: property.id,
+          title: property.title,
+          description: property.description,
+          price: property.price,
+          type: property.type,
+          bedrooms: property.bedrooms,
+          bathrooms: property.bathrooms,
+          area: property.area,
+          city: property.city,
+          address: property.address,
+          features: property.features,
+          photos: property.photos,
+          status: property.status
+        },
+        scores: {
+          ai: embeddingMatch ? aiSimilarity : null,
+          price: priceScore,
+          location: locationScore,
+          features: featureScore,
+          total: totalScore
+        },
+        matchReasons,
+        embeddingMatched: embeddingMatch
+      };
+    }));
+
+    scoredProperties.sort((a, b) => b.scores.total - a.scores.total);
+
+    const topMatches = scoredProperties.slice(0, 20);
+
+    await preference.update({
+      matchCount: topMatches.length,
+      lastMatchedAt: new Date()
+    });
+
+    res.status(200).json({
+      preference: {
+        id: preference.id,
+        clientId: preference.clientId,
+        clientName: preference.clientName,
+        lead: preference.lead
+      },
+      matches: topMatches,
+      totalFound: properties.length
+    });
+  } catch (error) {
+    res.status(500).json({ message: 'Error in wizard search', error: error.message });
+  }
+};
