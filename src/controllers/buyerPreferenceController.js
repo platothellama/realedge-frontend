@@ -587,7 +587,7 @@ exports.matchPropertiesToBuyer = async (req, res) => {
         ).join('\n');
 
         const completion = await openai.chat.completions.create({
-          model: 'gpt-4',
+          model: 'gpt-3.5-turbo',
           messages: [{
             role: 'system',
             content: 'You are a real estate AI assistant. Explain why properties match buyer requirements in a concise, helpful way.'
@@ -606,7 +606,7 @@ ${top3}
 
 Provide a brief explanation of why these properties are good matches.`
           }],
-          max_tokens: 300
+          max_tokens: 150
         });
         aiExplanation = completion.choices[0]?.message?.content || '';
       } catch (aiError) {
@@ -832,7 +832,7 @@ exports.explainMatch = async (req, res) => {
     if (process.env.OPENAI_API_KEY) {
       try {
         const completion = await openai.chat.completions.create({
-          model: 'gpt-4',
+          model: 'gpt-3.5-turbo',
           messages: [{
             role: 'system',
             content: 'You are a real estate AI assistant. Explain why a property matches buyer requirements in 2-3 sentences.'

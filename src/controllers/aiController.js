@@ -156,24 +156,18 @@ exports.generatePropertyDescription = async (req, res) => {
     const property = await Property.findByPk(propertyId);
     if (!property) return res.status(404).json({ message: 'Property not found' });
 
-    const prompt = `Write a luxury real estate property description for:
-Title: ${property.title}
-Type: ${property.type}
-Bedrooms: ${property.bedrooms}, Bathrooms: ${property.bathrooms}
-Area: ${property.area} sqm
-Features: ${property.features?.join(', ') || 'N/A'}
-Location: ${property.address}, ${property.city}, ${property.country}
-
-Write in a premium, marketing style (3-4 paragraphs).`;
+    const prompt = `Write 2 paragraph property description:
+${property.title} - ${property.type}, ${property.bedrooms}BR/${property.bathrooms}BA, ${property.area}m²
+Location: ${property.city}, ${property.country}
+Features: ${property.features?.join(', ') || 'N/A'}`;
 
     const completion = await openai.chat.completions.create({
       model: 'gpt-3.5-turbo',
       messages: [{ role: 'user', content: prompt }],
-      max_tokens: 500
+      max_tokens: 200
     });
 
     const description = completion.choices[0].message.content;
-
     await property.update({ description });
 
     res.status(200).json({ description });
@@ -189,43 +183,21 @@ exports.generateMarketingContent = async (req, res) => {
     const property = await Property.findByPk(propertyId);
     if (!property) return res.status(404).json({ message: 'Property not found' });
 
-    let prompt = '';
-    
-    switch (contentType) {
-      case 'social_post':
-        prompt = `Write an engaging social media post (Instagram/Facebook) for a luxury property:
-Property: ${property.title}
-Price: $${property.price.toLocaleString()}
-Location: ${property.city}
-Features: ${property.bedrooms} bed, ${property.bathrooms} bath, ${property.area} sqm
-Include emojis, hashtags, and a call to action.`;
-        break;
-      case 'ads_copy':
-        prompt = `Write 3 Google/Facebook ad variations for:
-Property: ${property.title}
-Price: $${property.price.toLocaleString()}
-Target audience: Luxury property buyers
-Each ad should have: Headline (30 chars), Description (90 chars), Call to action`;
-        break;
-      case 'email':
-        prompt = `Write a personalized email template for a lead interested in:
-Property: ${property.title}
-Price: $${property.price.toLocaleString()}
-Include subject line, greeting, property highlights, and closing.`;
-        break;
-      default:
-        prompt = `Write a short property highlight for: ${property.title}`;
-    }
+    const prompts = {
+      social_post: `Write Instagram/Facebook post for: ${property.title} - $${Number(property.price).toLocaleString()}, ${property.city}. ${property.bedrooms}BR/${property.bathrooms}BA. Add emojis, hashtags.`,
+      ads_copy: `Write 3 ad variations for: ${property.title} $${Number(property.price).toLocaleString()}. Headline (25 chars), Description (70 chars).`,
+      email: `Write email for client interested in: ${property.title} - $${Number(property.price).toLocaleString()}. Subject + body.`,
+      default: `Highlight: ${property.title}, $${Number(property.price).toLocaleString()}, ${property.city}`
+    };
 
+    const prompt = prompts[contentType] || prompts.default;
     const completion = await openai.chat.completions.create({
       model: 'gpt-3.5-turbo',
       messages: [{ role: 'user', content: prompt }],
-      max_tokens: 500
+      max_tokens: 200
     });
 
-    const content = completion.choices[0].message.content;
-
-    res.status(200).json({ content });
+    res.status(200).json({ content: completion.choices[0].message.content });
   } catch (error) {
     res.status(500).json({ message: 'Error generating content', error: error.message });
   }
@@ -741,19 +713,19 @@ Features: ${property.features?.join(', ') || 'N/A'}
     if (sections.includes('ad') || sections.includes('all')) {
       try {
         const completion = await openai.chat.completions.create({
-          model: "gpt-4",
+          model: "gpt-3.5-turbo",
           messages: [{
             role: "system",
-            content: "You are a digital marketing expert. Write professional ad copy for Google/Facebook ads."
+            content: "Write ad copy for Google/Facebook ads."
           }, {
             role: "user",
-            content: `${propertyInfo}\n\nGenerate: 3 ad variations with Headline (30 chars), Description (90 chars), Call to Action`
+            content: `${propertyInfo}\n\n3 ad variations: Headline (25 chars), Description (70 chars).`
           }],
-          max_tokens: 300
+          max_tokens: 200
         });
         results.ads = completion.choices[0]?.message?.content || '';
       } catch (e) {
-        results.ads = 'AI ad generation unavailable';
+        results.ads = 'AI unavailable';
       }
     }
 
@@ -806,19 +778,19 @@ Status: ${lead.status}
     if (process.env.OPENAI_API_KEY) {
       try {
         const completion = await openai.chat.completions.create({
-          model: "gpt-4",
+          model: "gpt-3.5-turbo",
           messages: [{
             role: "system",
-            content: "You are a professional real estate agent. Write personalized, warm, and effective client communications."
+            content: "Write personalized client communications."
           }, {
             role: "user",
-            content: `${context}\n\n${prompt}`
+            content: `Client: ${lead.name}, Budget: $${lead.budget || 'N/A'}, Status: ${lead.status}\n${prompt}`
           }],
-          max_tokens: 400
+          max_tokens: 250
         });
         generatedContent = completion.choices[0]?.message?.content || '';
       } catch (aiError) {
-        generatedContent = 'AI generation unavailable. Please try again later.';
+        generatedContent = 'AI unavailable. Try again.';
       }
     } else {
       generatedContent = 'OpenAI API key not configured';
@@ -870,29 +842,19 @@ exports.generateMarketReport = async (req, res) => {
 
       try {
         const completion = await openai.chat.completions.create({
-          model: "gpt-4",
+          model: "gpt-3.5-turbo",
           messages: [{
             role: "system",
-            content: "You are a senior real estate market analyst. Generate professional, data-driven market reports."
+            content: "Real estate market analyst."
           }, {
             role: "user",
-            content: `Current Market Data for ${city || 'All Areas'}:
-- Total Properties: ${marketStats.totalProperties}
-- Available: ${marketStats.availableProperties}
-- Average Price: $${marketStats.avgPrice.toLocaleString()}
-- Total Sales (Closed): ${marketStats.totalSales}
-- Active Leads: ${marketStats.activeLeads}
-- Conversion Rate: ${marketStats.conversionRate}%
-
-${reportTypes[reportType] || reportTypes['market_overview']}
-
-Include specific numbers from the data above and actionable insights.`
+            content: `Market: ${marketStats.totalProperties} props, $${marketStats.avgPrice.toLocaleString()} avg, ${marketStats.totalSales} sales.\nGenerate ${reportType || 'overview'} report.`
           }],
-          max_tokens: 800
+          max_tokens: 400
         });
         report = completion.choices[0]?.message?.content || '';
       } catch (aiError) {
-        report = 'AI report generation unavailable';
+        report = 'AI unavailable';
       }
     } else {
       report = 'OpenAI API key not configured';
@@ -969,28 +931,19 @@ exports.getInvestmentRecommendations = async (req, res) => {
     if (process.env.OPENAI_API_KEY && recommendations.length > 0) {
       try {
         const completion = await openai.chat.completions.create({
-          model: "gpt-4",
+          model: "gpt-3.5-turbo",
           messages: [{
             role: "system",
-            content: "You are a real estate investment advisor. Provide personalized investment recommendations."
+            content: "Real estate investment advisor."
           }, {
             role: "user",
-            content: `Investment Criteria:
-- Budget: $${budget}
-- Risk Tolerance: ${riskTolerance}
-- Strategy: ${strategy}
-- Preferred Location: ${location || 'Any'}
-
-Top 3 Recommendations:
-${recommendations.slice(0, 3).map((r, i) => `${i+1}. ${r.property.title} - $${r.property.price} - ${r.property.city} - Yield: ${r.rentalYield}%`).join('\n')}
-
-Provide investment advice considering the strategy: ${strategy}`
+            content: `Budget: $${budget}, Strategy: ${strategy}, Location: ${location || 'Any'}\nTop picks: ${recommendations.slice(0, 3).map((r, i) => `${r.property.title} - $${r.property.price} - ${r.property.city} - Yield: ${r.rentalYield}%`).join(' | ')}\nGive brief advice.`
           }],
-          max_tokens: 300
+          max_tokens: 200
         });
         aiAnalysis = completion.choices[0]?.message?.content || '';
       } catch (aiError) {
-        console.log('AI analysis unavailable');
+        console.log('AI unavailable');
       }
     }
 
@@ -1005,63 +958,159 @@ Provide investment advice considering the strategy: ${strategy}`
   }
 };
 
+const { Op } = require('sequelize');
+
+const AI_MODEL = 'gpt-3.5-turbo';
+const MAX_TOKENS_SHORT = 150;
+const MAX_TOKENS_MEDIUM = 300;
+
+const responseCache = new Map();
+const CACHE_TTL = 5 * 60 * 1000;
+
+const getCacheKey = (message, hasData) => `${message.toLowerCase().slice(0, 50)}_${hasData}`;
+const getCached = (key) => {
+  const cached = responseCache.get(key);
+  if (cached && Date.now() - cached.timestamp < CACHE_TTL) return cached.data;
+  responseCache.delete(key);
+  return null;
+};
+const setCache = (key, data) => {
+  if (responseCache.size > 100) {
+    const firstKey = responseCache.keys().next().value;
+    responseCache.delete(firstKey);
+  }
+  responseCache.set(key, { data, timestamp: Date.now() });
+};
+
+const extractPropertyFilters = (query) => {
+  const lowerQuery = query.toLowerCase();
+  const filters = { priceMin: null, priceMax: null, bedrooms: null, bathrooms: null, propertyType: null, city: null, status: null };
+  const priceRegex = /\$?\s*(\d+(?:,\d{3})*(?:\.\d+)?)\s*(?:k|million|m|b|billion)?/gi;
+  const prices = [];
+  let match;
+  while ((match = priceRegex.exec(query)) !== null) {
+    let price = parseFloat(match[1].replace(/,/g, ''));
+    const m = match[0].toLowerCase();
+    if (m.includes('k')) price *= 1000;
+    else if (m.includes('million') || m.includes('m')) price *= 1000000;
+    prices.push(price);
+  }
+  if (prices.length >= 2) { filters.priceMin = Math.min(...prices); filters.priceMax = Math.max(...prices); }
+  else if (prices.length === 1) {
+    if (lowerQuery.includes('less') || lowerQuery.includes('under') || lowerQuery.includes('below')) filters.priceMax = prices[0];
+    else if (lowerQuery.includes('more') || lowerQuery.includes('over') || lowerQuery.includes('above')) filters.priceMin = prices[0];
+    else { filters.priceMax = prices[0] * 1.2; filters.priceMin = prices[0] * 0.8; }
+  }
+  const bedroomMatch = query.match(/(\d+)\s*(?:bed|bedroom|br)/i);
+  if (bedroomMatch) filters.bedrooms = parseInt(bedroomMatch[1]);
+  const bathroomMatch = query.match(/(\d+)\s*(?:bath|bathroom|ba)/i);
+  if (bathroomMatch) filters.bathrooms = parseInt(bathroomMatch[1]);
+  const types = ['apartment', 'house', 'villa', 'office', 'land', 'commercial', 'penthouse', 'studio'];
+  for (const t of types) { if (lowerQuery.includes(t)) { filters.propertyType = t.charAt(0).toUpperCase() + t.slice(1); break; } }
+  const locs = ['beirut', 'byblos', 'jounieh', 'hamra', 'achrafieh', 'gemmayze', 'zahle', 'tyre', 'sidon'];
+  for (const l of locs) { if (lowerQuery.includes(l)) { filters.city = l.charAt(0).toUpperCase() + l.slice(1); break; } }
+  if (lowerQuery.includes('available') || lowerQuery.includes('for sale')) filters.status = 'Available';
+  else if (lowerQuery.includes('sold')) filters.status = 'Sold';
+  return filters;
+};
+
+const isPropertyQuery = (q) => ['property', 'properties', 'listing', 'apartment', 'house', 'villa', 'bedroom', 'find', 'search', 'show', 'list'].some(k => q.toLowerCase().includes(k));
+const isLeadQuery = (q) => ['lead', 'leads', 'client', 'contact', 'buyer', 'prospect'].some(k => q.toLowerCase().includes(k));
+const isDealQuery = (q) => ['deal', 'deals', 'negotiation', 'pipeline', 'closing', 'commission'].some(k => q.toLowerCase().includes(k));
+const isRevenueQuery = (q) => ['revenue', 'income', 'expense', 'profit', 'financial', 'sales'].some(k => q.toLowerCase().includes(k));
+const needsAI = (q) => ['why', 'what', 'how', 'recommend', 'suggest', 'explain', 'analyze', 'insight', 'think'].some(k => q.toLowerCase().includes(k));
+
+const formatPrice = (p) => p >= 1000000 ? `$${(p / 1000000).toFixed(1)}M` : p >= 1000 ? `$${(p / 1000).toFixed(0)}K` : `$${p}`;
+const fmtProp = (p) => ({ id: p.id, title: p.title, price: formatPrice(Number(p.price)), type: p.type, bedrooms: p.bedrooms, bathrooms: p.bathrooms, area: p.area, city: p.city, image: p.photos?.[0] || null });
+
 exports.aiAssistant = async (req, res) => {
   try {
-    const { message, context } = req.body;
-    
-    if (!message) {
-      return res.status(400).json({ message: 'Message is required' });
+    const { message } = req.body;
+    if (!message) return res.status(400).json({ message: 'Message is required' });
+
+    const filters = extractPropertyFilters(message);
+    const isProp = isPropertyQuery(message);
+    const isLead = isLeadQuery(message);
+    const isDeal = isDealQuery(message);
+    const isRev = isRevenueQuery(message);
+    const needsSummary = needsAI(message);
+
+    let propertyResults = null, leadResults = null, dealResults = null, revenueResults = null;
+    const whereClause = {};
+
+    if (isProp) {
+      if (filters.priceMin || filters.priceMax || filters.propertyType || filters.city || filters.status || filters.bedrooms || filters.bathrooms) {
+        if (filters.priceMin) whereClause.price = { ...whereClause.price, [Op.gte]: filters.priceMin };
+        if (filters.priceMax) whereClause.price = { ...whereClause.price, [Op.lte]: filters.priceMax };
+        if (filters.propertyType) whereClause.type = filters.propertyType;
+        if (filters.city) whereClause.city = { [Op.like]: `%${filters.city}%` };
+        if (filters.status) whereClause.status = filters.status;
+        if (filters.bedrooms) whereClause.bedrooms = { [Op.gte]: filters.bedrooms };
+        if (filters.bathrooms) whereClause.bathrooms = { [Op.gte]: filters.bathrooms };
+      } else whereClause.status = 'Available';
+      
+      const props = await Property.findAll({ where: whereClause, attributes: ['id', 'title', 'price', 'status', 'city', 'type', 'bedrooms', 'bathrooms', 'area', 'photos'], order: [['price', 'ASC']], limit: 20 });
+      propertyResults = { count: props.length, properties: props.map(fmtProp) };
     }
 
-    const [properties, leads, deals, commissions] = await Promise.all([
-      Property.count(),
-      Lead.count(),
-      Deal.count(),
-      Commission.count()
-    ]);
+    if (isLead) {
+      const leads = await Lead.findAll({ attributes: ['id', 'name', 'status', 'budget', 'source'], order: [['createdAt', 'DESC']], limit: 30 });
+      const byStatus = leads.reduce((a, l) => { a[l.status] = (a[l.status] || 0) + 1; return a; }, {});
+      leadResults = { total: leads.length, hotCount: leads.filter(l => l.budget && Number(l.budget) > 2000000).length, byStatus, recent: leads.slice(0, 8).map(l => ({ id: l.id, name: l.name, budget: l.budget ? formatPrice(Number(l.budget)) : '-', status: l.status })) };
+    }
 
+    if (isDeal) {
+      const deals = await Deal.findAll({ attributes: ['id', 'title', 'dealStage', 'commission', 'finalPrice'], order: [['createdAt', 'DESC']], limit: 30 });
+      const open = deals.filter(d => d.dealStage !== 'Closed'), closed = deals.filter(d => d.dealStage === 'Closed');
+      dealResults = { total: deals.length, open: open.length, closed: closed.length, pipeline: formatPrice(open.reduce((s, d) => s + Number(d.finalPrice || 0), 0)), commissions: formatPrice(closed.reduce((s, d) => s + Number(d.commission || 0), 0)) };
+    }
+
+    if (isRev) {
+      const [txns, comms] = await Promise.all([
+        Transaction.findAll({ attributes: ['id', 'type', 'amount'] }),
+        Commission.findAll({ attributes: ['id', 'amount', 'status'] })
+      ]);
+      const income = txns.filter(t => t.type === 'income').reduce((s, t) => s + Number(t.amount || 0), 0);
+      const expenses = txns.filter(t => t.type === 'expense').reduce((s, t) => s + Number(t.amount || 0), 0);
+      const pending = comms.filter(c => c.status === 'Pending').reduce((s, c) => s + Number(c.amount || 0), 0);
+      const paid = comms.filter(c => c.status === 'Paid').reduce((s, c) => s + Number(c.amount || 0), 0);
+      revenueResults = { income: formatPrice(income), expenses: formatPrice(expenses), profit: formatPrice(income - expenses), pending: formatPrice(pending), paid: formatPrice(paid) };
+    }
+
+    const summary = { props: propertyResults?.count || 0, leads: leadResults?.total || 0, deals: dealResults?.total || 0, rev: revenueResults ? true : false };
+    
     let response = '';
-    if (process.env.OPENAI_API_KEY) {
+    const hasSpecificData = propertyResults || leadResults || dealResults || revenueResults;
+    const cacheKey = getCacheKey(message, hasSpecificData);
+    const cached = getCacheKey(cacheKey, '');
+    if (cached) { response = cached; }
+    else if (process.env.OPENAI_API_KEY && hasSpecificData) {
       try {
+        let dataSummary = `Data: ${summary.props} props, ${summary.leads} leads, ${summary.deals} deals`;
+        if (propertyResults) dataSummary += `\nProps: ${propertyResults.properties.slice(0, 5).map(p => `${p.title} - ${p.price}`).join(' | ')}`;
+        if (leadResults) dataSummary += `\nLeads: ${leadResults.total} (${leadResults.hotCount} hot)`;
+        if (dealResults) dataSummary += `\nDeals: ${dealResults.open} open, ${dealResults.closed} closed`;
+        if (revenueResults) dataSummary += `\nRevenue: ${revenueResults.income} income, ${revenueResults.profit} profit`;
+
+        const systemPrompt = `RealEdge CRM assistant. ${dataSummary}. ${needsSummary ? 'Give brief insights.' : 'Just list/answer.'} Be concise.`;
+        
         const completion = await openai.chat.completions.create({
-          model: "gpt-4",
-          messages: [{
-            role: "system",
-            content: `You are a helpful AI assistant for a real estate CRM called RealEdge. 
-Current System Data:
-- ${properties} properties in system
-- ${leads} leads
-- ${deals} deals
-- ${commissions} commissions
-
-You can help with:
-- Property recommendations
-- Lead follow-ups
-- Market insights
-- Creating communications
-- Generating reports
-- Answering questions about the system
-
-Be concise, professional, and actionable in your responses.`
-          }, {
-            role: "user",
-            content: message
-          }],
-          max_tokens: 500
+          model: AI_MODEL,
+          messages: [{ role: "system", content: systemPrompt }, { role: "user", content: message }],
+          max_tokens: needsSummary ? MAX_TOKENS_MEDIUM : MAX_TOKENS_SHORT
         });
         response = completion.choices[0]?.message?.content || '';
-      } catch (aiError) {
-        response = 'AI is currently unavailable. Please try again later.';
-      }
+        setCache(cacheKey, response);
+      } catch (err) { response = 'AI unavailable. Data shown below.'; }
     } else {
-      response = 'OpenAI API key not configured. Please add your API key to the .env file.';
+      if (propertyResults) response = `Found ${propertyResults.count} properties:\n` + propertyResults.properties.slice(0, 8).map(p => `• ${p.title} - ${p.price} (${p.bedrooms}BR/${p.bathrooms}BA, ${p.city})`).join('\n');
+      else if (leadResults) response = `Leads: ${leadResults.total} total, ${leadResults.hotCount} hot\nBy status: ${JSON.stringify(leadResults.byStatus)}`;
+      else if (dealResults) response = `Deals: ${dealResults.total} (${dealResults.open} open, ${dealResults.closed} closed)\nPipeline: ${dealResults.pipeline} | Commissions: ${dealResults.commissions}`;
+      else if (revenueResults) response = `Income: ${revenueResults.income} | Expenses: ${revenueResults.expenses}\nProfit: ${revenueResults.profit} | Pending: ${revenueResults.pending}`;
+      else response = `CRM has ${summary.props} properties, ${summary.leads} leads, ${summary.deals} deals. Try: "properties under $500K" or "hot leads"`;
     }
 
-    res.status(200).json({
-      message: message,
-      response,
-      context: { properties, leads, deals, commissions }
-    });
+    res.status(200).json({ message, response, data: { properties: propertyResults, leads: leadResults, deals: dealResults, revenue: revenueResults, summary } });
   } catch (error) {
     res.status(500).json({ message: 'Error with AI assistant', error: error.message });
   }
