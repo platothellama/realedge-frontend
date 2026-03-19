@@ -133,10 +133,12 @@ User.hasMany(Commission, { foreignKey: 'agentId', as: 'commissions' });
 Commission.belongsTo(Deal, { foreignKey: 'dealId', as: 'deal' });
 Deal.hasMany(Commission, { foreignKey: 'dealId', as: 'commissions' });
 
-// Task - User Relation
-Task.belongsTo(User, { foreignKey: 'assignedToUserId', as: 'assignedUser' });
+// Task - User Relation (assigned to)
 Task.belongsTo(User, { foreignKey: 'assignedToUserId', as: 'assignedTo' });
 User.hasMany(Task, { foreignKey: 'assignedToUserId', as: 'tasks' });
+
+// Task - User Relation (assigned by)
+Task.belongsTo(User, { foreignKey: 'assignedByUserId', as: 'assignedBy' });
 
 // Task - Lead Relation
 Task.belongsTo(Lead, { foreignKey: 'leadId', as: 'lead' });
