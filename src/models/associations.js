@@ -83,6 +83,7 @@ Lead.hasMany(Deal, { foreignKey: 'leadId', as: 'deals' });
 
 // Deal - User Relation (Agent)
 Deal.belongsTo(User, { foreignKey: 'agentId', as: 'agent' });
+Deal.belongsTo(User, { foreignKey: 'agentId', as: 'broker' });
 User.hasMany(Deal, { foreignKey: 'agentId', as: 'agentDeals' });
 
 // Visit - Property Relation
