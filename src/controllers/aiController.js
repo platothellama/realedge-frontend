@@ -984,7 +984,7 @@ const setCache = (key, data) => {
 
 const extractPropertyFilters = (query) => {
   const lowerQuery = query.toLowerCase();
-  const filters = { priceMin: null, priceMax: null, bedrooms: null, bathrooms: null, propertyType: null, city: null, status: null };
+  const filters = { priceMin: null, priceMax: null, bedrooms: null, bathrooms: null, propertyType: null, city: null, status: null, areaMin: null, areaMax: null };
   const priceRegex = /\$?\s*(\d+(?:,\d{3})*(?:\.\d+)?)\s*(?:k|million|m|b|billion)?/gi;
   const prices = [];
   let match;
@@ -1007,10 +1007,22 @@ const extractPropertyFilters = (query) => {
   if (bathroomMatch) filters.bathrooms = parseInt(bathroomMatch[1]);
   const types = ['apartment', 'house', 'villa', 'office', 'land', 'commercial', 'penthouse', 'studio'];
   for (const t of types) { if (lowerQuery.includes(t)) { filters.propertyType = t.charAt(0).toUpperCase() + t.slice(1); break; } }
-  const locs = ['beirut', 'byblos', 'jounieh', 'hamra', 'achrafieh', 'gemmayze', 'zahle', 'tyre', 'sidon'];
+  const locs = [
+    'beirut', 'byblos', 'jounieh', 'hamra', 'achrafieh', 'gemmayze', 'zahle', 'tyre', 'sidon',
+    'mount lebanon', 'tripoli', 'baalbek', 'aley', 'chouf', 'keserwan', 'bcharreh', 'nabatieh',
+    'badaro', 'baabda', 'baadba', 'antelias', 'dbayeh', 'jbeil', 'kaslik', 'broumana',
+    'daychounieh', 'ain saadeh', 'tabarja', 'safra', 'ghostra', 'ajaltoun', 'ftneh',
+    'zahle', 'zalhle', 'deir el qamar', 'beiteddine', 'saoufar', 'bhamdoun', 'souk el gharb',
+    'mar mikhael', 'downtown', 'rue de bras', 'furn el chebbak', 'borj hammoud', 'dekwaneh',
+    'sin el fil', 'hazmieh', 'ramlet baida', 'raouche', 'jnah', 'bachoura', 'mazraa', 'ras maska',
+    'al-mina', 'abou samra', 'qobbeh', 'mina', 'sidion old city', 'bourj ech chemali', 'haret saida'
+  ];
   for (const l of locs) { if (lowerQuery.includes(l)) { filters.city = l.charAt(0).toUpperCase() + l.slice(1); break; } }
   if (lowerQuery.includes('available') || lowerQuery.includes('for sale')) filters.status = 'Available';
   else if (lowerQuery.includes('sold')) filters.status = 'Sold';
+  const areaMatch = query.match(/(\d+)\s*(?:sqm|sqm|square meter|square meters|m²|m2)/i);
+  if (areaMatch) filters.areaMin = parseInt(areaMatch[1]) * 0.8;
+  if (areaMatch) filters.areaMax = parseInt(areaMatch[1]) * 1.2;
   return filters;
 };
 
@@ -1019,6 +1031,29 @@ const isLeadQuery = (q) => ['lead', 'leads', 'client', 'contact', 'buyer', 'pros
 const isDealQuery = (q) => ['deal', 'deals', 'negotiation', 'pipeline', 'closing', 'commission'].some(k => q.toLowerCase().includes(k));
 const isRevenueQuery = (q) => ['revenue', 'income', 'expense', 'profit', 'financial', 'sales'].some(k => q.toLowerCase().includes(k));
 const needsAI = (q) => ['why', 'what', 'how', 'recommend', 'suggest', 'explain', 'analyze', 'insight', 'think'].some(k => q.toLowerCase().includes(k));
+
+const isMarketKnowledgeQuery = (q) => {
+  const lowerQuery = q.toLowerCase();
+  const marketKeywords = [
+    'average price', 'avg price', 'market price', 'typical price', 'price range',
+    'cost per sqm', 'price per sqm', 'price per square', 'per square meter',
+    'market trends', 'market analysis', 'market value', 'investment potential',
+    'rental yield', 'roi', 'return on investment', 'capital appreciation',
+    'best area', 'best location', 'most expensive', 'cheapest', 'affordable',
+    'is it worth', 'should i buy', 'good investment', 'market forecast',
+    'how much does', 'what is the price', 'what would be the price',
+    'growth rate', 'price appreciation', 'demand', 'supply', 'inventory'
+  ];
+  return marketKeywords.some(k => lowerQuery.includes(k));
+};
+
+const isSpecificPropertySearch = (q) => {
+  const lowerQuery = q.toLowerCase();
+  const searchKeywords = ['show me', 'find me', 'i want', 'looking for', 'need an', 'need a', 'search for', 'list properties', 'available properties'];
+  const hasSearchIntent = searchKeywords.some(k => lowerQuery.includes(k));
+  const hasSpecificCriteria = lowerQuery.includes('under $') || lowerQuery.includes('over $') || lowerQuery.includes('budget') || lowerQuery.includes('max') || lowerQuery.includes('min');
+  return hasSearchIntent && hasSpecificCriteria;
+};
 
 const formatPrice = (p) => p >= 1000000 ? `$${(p / 1000000).toFixed(1)}M` : p >= 1000 ? `$${(p / 1000).toFixed(0)}K` : `$${p}`;
 const fmtProp = (p) => ({ id: p.id, title: p.title, price: formatPrice(Number(p.price)), type: p.type, bedrooms: p.bedrooms, bathrooms: p.bathrooms, area: p.area, city: p.city, image: p.photos?.[0] || null });
@@ -1034,12 +1069,16 @@ exports.aiAssistant = async (req, res) => {
     const isDeal = isDealQuery(message);
     const isRev = isRevenueQuery(message);
     const needsSummary = needsAI(message);
+    const isMarketQuery = isMarketKnowledgeQuery(message);
+    const isSpecificSearch = isSpecificPropertySearch(message);
 
     let propertyResults = null, leadResults = null, dealResults = null, revenueResults = null;
     const whereClause = {};
 
-    if (isProp) {
-      if (filters.priceMin || filters.priceMax || filters.propertyType || filters.city || filters.status || filters.bedrooms || filters.bathrooms) {
+    // Skip property database search for market knowledge queries (e.g., "average price of apartments")
+    // Use AI's training knowledge for these general market questions
+    if (isProp && !isMarketQuery) {
+      if (filters.priceMin || filters.priceMax || filters.propertyType || filters.city || filters.status || filters.bedrooms || filters.bathrooms || filters.areaMin || filters.areaMax || isSpecificSearch) {
         if (filters.priceMin) whereClause.price = { ...whereClause.price, [Op.gte]: filters.priceMin };
         if (filters.priceMax) whereClause.price = { ...whereClause.price, [Op.lte]: filters.priceMax };
         if (filters.propertyType) whereClause.type = filters.propertyType;
@@ -1047,6 +1086,8 @@ exports.aiAssistant = async (req, res) => {
         if (filters.status) whereClause.status = filters.status;
         if (filters.bedrooms) whereClause.bedrooms = { [Op.gte]: filters.bedrooms };
         if (filters.bathrooms) whereClause.bathrooms = { [Op.gte]: filters.bathrooms };
+        if (filters.areaMin) whereClause.area = { ...whereClause.area, [Op.gte]: filters.areaMin };
+        if (filters.areaMax) whereClause.area = { ...whereClause.area, [Op.lte]: filters.areaMax };
       } else whereClause.status = 'Available';
       
       const props = await Property.findAll({ where: whereClause, attributes: ['id', 'title', 'price', 'status', 'city', 'type', 'bedrooms', 'bathrooms', 'area', 'photos'], order: [['price', 'ASC']], limit: 20 });
