@@ -47,6 +47,10 @@ const Deal = sequelize.define('Deal', {
   buyerLeadId: {
     type: DataTypes.UUID,
     allowNull: true
+  },
+  closedAt: {
+    type: DataTypes.DATE,
+    allowNull: true
   }
 }, {
   timestamps: true
