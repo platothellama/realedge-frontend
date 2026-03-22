@@ -1125,7 +1125,7 @@ exports.aiAssistant = async (req, res) => {
     const cacheKey = getCacheKey(message, hasSpecificData);
     const cached = getCached(cacheKey);
     if (cached) { response = cached; }
-    else if (process.env.OPENAI_API_KEY && hasSpecificData) {
+    else if (process.env.OPENAI_API_KEY && (hasSpecificData || isMarketQuery)) {
       try {
         let dataSummary = `Data: ${summary.props} props, ${summary.leads} leads, ${summary.deals} deals`;
         if (propertyResults) dataSummary += `\nProps: ${propertyResults.properties.slice(0, 5).map(p => `${p.title} - ${p.price}`).join(' | ')}`;
@@ -1133,12 +1133,15 @@ exports.aiAssistant = async (req, res) => {
         if (dealResults) dataSummary += `\nDeals: ${dealResults.open} open, ${dealResults.closed} closed`;
         if (revenueResults) dataSummary += `\nRevenue: ${revenueResults.income} income, ${revenueResults.profit} profit`;
 
-        const systemPrompt = `RealEdge CRM assistant. ${dataSummary}. ${needsSummary ? 'Give brief insights.' : 'Just list/answer.'} Be concise.`;
+        // For market knowledge queries, use AI with general real estate expertise
+        const systemPrompt = isMarketQuery 
+          ? `You are a knowledgeable Lebanese real estate market expert. Answer questions about real estate prices, market trends, rental yields, and investment opportunities in Lebanon using your training knowledge. Be specific about locations like Mount Lebanon, Baabda, Beirut, etc. Include approximate price ranges in USD.`
+          : `RealEdge CRM assistant. ${dataSummary}. ${needsSummary ? 'Give brief insights.' : 'Just list/answer.'} Be concise.`;
         
         const completion = await openai.chat.completions.create({
           model: AI_MODEL,
           messages: [{ role: "system", content: systemPrompt }, { role: "user", content: message }],
-          max_tokens: needsSummary ? MAX_TOKENS_MEDIUM : MAX_TOKENS_SHORT
+          max_tokens: isMarketQuery ? MAX_TOKENS_MEDIUM : (needsSummary ? MAX_TOKENS_MEDIUM : MAX_TOKENS_SHORT)
         });
         response = completion.choices[0]?.message?.content || '';
         setCache(cacheKey, response);
