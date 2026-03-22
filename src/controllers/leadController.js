@@ -1,4 +1,4 @@
-const { Lead, PriceHistory, Property, User } = require('../models/associations');
+const { Lead, PriceHistory, Property, User, Visit } = require('../models/associations');
 
 exports.getAllLeads = async (req, res) => {
   try {
@@ -26,6 +26,11 @@ exports.getAllLeads = async (req, res) => {
           model: User,
           as: 'assignedUser',
           attributes: ['id', 'name', 'photo']
+        },
+        {
+          model: Visit,
+          as: 'visits',
+          include: [{ model: Property, as: 'property', attributes: ['id', 'title', 'address', 'city'] }]
         }
       ],
       order: [['createdAt', 'DESC']]
@@ -49,6 +54,11 @@ exports.getLeadById = async (req, res) => {
           model: User,
           as: 'assignedUser',
           attributes: ['id', 'name', 'photo']
+        },
+        {
+          model: Visit,
+          as: 'visits',
+          include: [{ model: Property, as: 'property', attributes: ['id', 'title', 'address', 'city'] }]
         }
       ]
     });

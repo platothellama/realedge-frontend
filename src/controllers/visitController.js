@@ -1,4 +1,4 @@
-const { Visit, Property, User } = require('../models/associations');
+const { Visit, Property, User, Lead } = require('../models/associations');
 
 exports.getAllVisits = async (req, res) => {
   try {
@@ -15,7 +15,8 @@ exports.getAllVisits = async (req, res) => {
       where: whereClause,
       include: [
         { model: Property, as: 'property', attributes: ['id', 'title', 'address', 'city'] },
-        { model: User, as: 'broker', attributes: ['id', 'name', 'photo'] }
+        { model: User, as: 'broker', attributes: ['id', 'name', 'photo'] },
+        { model: Lead, as: 'lead', attributes: ['id', 'name', 'email', 'phone'] }
       ],
       order: [['visitDate', 'ASC']]
     });
@@ -31,7 +32,8 @@ exports.getVisitById = async (req, res) => {
     const visit = await Visit.findByPk(req.params.id, {
       include: [
         { model: Property, as: 'property' },
-        { model: User, as: 'broker', attributes: ['id', 'name', 'photo'] }
+        { model: User, as: 'broker', attributes: ['id', 'name', 'photo'] },
+        { model: Lead, as: 'lead', attributes: ['id', 'name', 'email', 'phone'] }
       ]
     });
 

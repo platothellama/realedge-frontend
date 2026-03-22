@@ -50,6 +50,14 @@ const Visit = sequelize.define('Visit', {
   googleEventId: {
     type: DataTypes.STRING,
     allowNull: true
+  },
+  leadId: {
+    type: DataTypes.UUID,
+    allowNull: true,
+    references: {
+      model: 'Leads',
+      key: 'id'
+    }
   }
 }, {
   timestamps: true
