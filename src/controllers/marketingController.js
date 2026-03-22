@@ -51,7 +51,7 @@ exports.generateMarketingContent = async (req, res) => {
         { role: "system", content: "You are a professional real estate marketing expert." },
         { role: "user", content: prompt }
       ],
-      max_tokens: 1000,
+      max_completion_tokens: 1000,
     });
 
     const content = response.choices[0].message.content;
