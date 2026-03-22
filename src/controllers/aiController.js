@@ -162,7 +162,7 @@ Location: ${property.city}, ${property.country}
 Features: ${property.features?.join(', ') || 'N/A'}`;
 
     const completion = await openai.chat.completions.create({
-      model: 'gpt-5-nano',
+      model: 'gpt-3.5-turbo',
       messages: [{ role: 'user', content: prompt }],
       max_tokens: 200
     });
@@ -192,7 +192,7 @@ exports.generateMarketingContent = async (req, res) => {
 
     const prompt = prompts[contentType] || prompts.default;
     const completion = await openai.chat.completions.create({
-      model: 'gpt-5-nano',
+      model: 'gpt-3.5-turbo',
       messages: [{ role: 'user', content: prompt }],
       max_tokens: 200
     });
@@ -601,7 +601,7 @@ exports.matchPropertiesToLead = async (req, res) => {
     if (process.env.OPENAI_API_KEY && topMatches.length > 0) {
       try {
         const completion = await openai.chat.completions.create({
-          model: "gpt-5-nano",
+          model: "gpt-4",
           messages: [{
             role: "system",
             content: "You are a real estate AI assistant. Provide brief, actionable insights about property matches for a client."
@@ -656,7 +656,7 @@ Features: ${property.features?.join(', ') || 'N/A'}
     if (sections.includes('description') || sections.includes('all')) {
       try {
         const completion = await openai.chat.completions.create({
-          model: "gpt-5-nano",
+          model: "gpt-4",
           messages: [{
             role: "system",
             content: "You are a luxury real estate copywriter. Write a premium, marketing-style property description (3-4 paragraphs) that highlights unique features and creates desire."
@@ -675,7 +675,7 @@ Features: ${property.features?.join(', ') || 'N/A'}
     if (sections.includes('seo') || sections.includes('all')) {
       try {
         const completion = await openai.chat.completions.create({
-          model: "gpt-5-nano",
+          model: "gpt-4",
           messages: [{
             role: "system",
             content: "You are an SEO expert. Generate an SEO-optimized title and meta description for a property listing."
@@ -694,7 +694,7 @@ Features: ${property.features?.join(', ') || 'N/A'}
     if (sections.includes('social') || sections.includes('all')) {
       try {
         const completion = await openai.chat.completions.create({
-          model: "gpt-5-nano",
+          model: "gpt-4",
           messages: [{
             role: "system",
             content: "You are a social media expert. Create engaging social media posts for a luxury property."
@@ -713,7 +713,7 @@ Features: ${property.features?.join(', ') || 'N/A'}
     if (sections.includes('ad') || sections.includes('all')) {
       try {
         const completion = await openai.chat.completions.create({
-          model: "gpt-5-nano",
+          model: "gpt-3.5-turbo",
           messages: [{
             role: "system",
             content: "Write ad copy for Google/Facebook ads."
@@ -778,7 +778,7 @@ Status: ${lead.status}
     if (process.env.OPENAI_API_KEY) {
       try {
         const completion = await openai.chat.completions.create({
-          model: "gpt-5-nano",
+          model: "gpt-3.5-turbo",
           messages: [{
             role: "system",
             content: "Write personalized client communications."
@@ -842,7 +842,7 @@ exports.generateMarketReport = async (req, res) => {
 
       try {
         const completion = await openai.chat.completions.create({
-          model: "gpt-5-nano",
+          model: "gpt-3.5-turbo",
           messages: [{
             role: "system",
             content: "Real estate market analyst."
@@ -931,7 +931,7 @@ exports.getInvestmentRecommendations = async (req, res) => {
     if (process.env.OPENAI_API_KEY && recommendations.length > 0) {
       try {
         const completion = await openai.chat.completions.create({
-          model: "gpt-5-nano",
+          model: "gpt-3.5-turbo",
           messages: [{
             role: "system",
             content: "Real estate investment advisor."
@@ -960,7 +960,7 @@ exports.getInvestmentRecommendations = async (req, res) => {
 
 const { Op } = require('sequelize');
 
-const AI_MODEL = 'gpt-5-nano';
+const AI_MODEL = 'gpt-3.5-turbo';
 const MAX_TOKENS_SHORT = 150;
 const MAX_TOKENS_MEDIUM = 300;
 
@@ -984,7 +984,7 @@ const setCache = (key, data) => {
 
 const extractPropertyFilters = (query) => {
   const lowerQuery = query.toLowerCase();
-  const filters = { priceMin: null, priceMax: null, bedrooms: null, bathrooms: null, propertyType: null, city: null, status: null, areaMin: null, areaMax: null };
+  const filters = { priceMin: null, priceMax: null, bedrooms: null, bathrooms: null, propertyType: null, city: null, status: null };
   const priceRegex = /\$?\s*(\d+(?:,\d{3})*(?:\.\d+)?)\s*(?:k|million|m|b|billion)?/gi;
   const prices = [];
   let match;
@@ -1007,85 +1007,18 @@ const extractPropertyFilters = (query) => {
   if (bathroomMatch) filters.bathrooms = parseInt(bathroomMatch[1]);
   const types = ['apartment', 'house', 'villa', 'office', 'land', 'commercial', 'penthouse', 'studio'];
   for (const t of types) { if (lowerQuery.includes(t)) { filters.propertyType = t.charAt(0).toUpperCase() + t.slice(1); break; } }
-  const locs = [
-    'beirut', 'byblos', 'jounieh', 'hamra', 'achrafieh', 'gemmayze', 'zahle', 'tyre', 'sidon',
-    'mount lebanon', 'tripoli', 'baalbek', 'aley', 'chouf', 'keserwan', 'bcharreh', 'nabatieh',
-    'badaro', 'baabda', 'baadba', 'antelias', 'dbayeh', 'jbeil', 'kaslik', 'broumana',
-    'daychounieh', 'ain saadeh', 'tabarja', 'safra', 'ghostra', 'ajaltoun', 'ftneh',
-    'zahle', 'zalhle', 'deir el qamar', 'beiteddine', 'saoufar', 'bhamdoun', 'souk el gharb',
-    'mar mikhael', 'downtown', 'rue de bras', 'furn el chebbak', 'borj hammoud', 'dekwaneh',
-    'sin el fil', 'hazmieh', 'ramlet baida', 'raouche', 'jnah', 'bachoura', 'mazraa', 'ras maska',
-    'al-mina', 'abou samra', 'qobbeh', 'mina', 'sidion old city', 'bourj ech chemali', 'haret saida'
-  ];
+  const locs = ['beirut', 'byblos', 'jounieh', 'hamra', 'achrafieh', 'gemmayze', 'zahle', 'tyre', 'sidon'];
   for (const l of locs) { if (lowerQuery.includes(l)) { filters.city = l.charAt(0).toUpperCase() + l.slice(1); break; } }
   if (lowerQuery.includes('available') || lowerQuery.includes('for sale')) filters.status = 'Available';
   else if (lowerQuery.includes('sold')) filters.status = 'Sold';
-  const areaMatch = query.match(/(\d+)\s*(?:sqm|sqm|square meter|square meters|m²|m2)/i);
-  if (areaMatch) filters.areaMin = parseInt(areaMatch[1]) * 0.8;
-  if (areaMatch) filters.areaMax = parseInt(areaMatch[1]) * 1.2;
   return filters;
 };
 
 const isPropertyQuery = (q) => ['property', 'properties', 'listing', 'apartment', 'house', 'villa', 'bedroom', 'find', 'search', 'show', 'list'].some(k => q.toLowerCase().includes(k));
-const isTotalCountQuery = (q) => ['total', 'how many', 'count', 'number of', 'all of our', 'since started', 'in total'].some(k => q.toLowerCase().includes(k));
 const isLeadQuery = (q) => ['lead', 'leads', 'client', 'contact', 'buyer', 'prospect'].some(k => q.toLowerCase().includes(k));
 const isDealQuery = (q) => ['deal', 'deals', 'negotiation', 'pipeline', 'closing', 'commission'].some(k => q.toLowerCase().includes(k));
 const isRevenueQuery = (q) => ['revenue', 'income', 'expense', 'profit', 'financial', 'sales'].some(k => q.toLowerCase().includes(k));
 const needsAI = (q) => ['why', 'what', 'how', 'recommend', 'suggest', 'explain', 'analyze', 'insight', 'think'].some(k => q.toLowerCase().includes(k));
-
-const extractLeadFilters = (query) => {
-  const lowerQuery = query.toLowerCase();
-  const filters = { status: null, budgetMin: null, budgetMax: null, source: null };
-  if (lowerQuery.includes('hot') || lowerQuery.includes('high budget') || lowerQuery.includes('high value')) filters.status = null;
-  if (lowerQuery.includes('new')) filters.status = 'New';
-  if (lowerQuery.includes('contacted')) filters.status = 'Contacted';
-  if (lowerQuery.includes('qualified')) filters.status = 'Qualified';
-  if (lowerQuery.includes('visit') || lowerQuery.includes('viewing')) filters.status = 'Visit Scheduled';
-  if (lowerQuery.includes('negotiation')) filters.status = 'Negotiation';
-  if (lowerQuery.includes('closed') || lowerQuery.includes('won')) filters.status = 'Closed Deal';
-  if (lowerQuery.includes('lost')) filters.status = 'Lost';
-  const budgetMatch = query.match(/\$?\s*(\d+(?:,\d{3})*(?:\.\d+)?)\s*(?:k|million|m)?/gi);
-  if (budgetMatch) {
-    let budget = parseFloat(budgetMatch[0].replace(/[$,]/g, ''));
-    if (budgetMatch[0].toLowerCase().includes('k')) budget *= 1000;
-    else if (budgetMatch[0].toLowerCase().includes('million') || budgetMatch[0].toLowerCase().includes('m')) budget *= 1000000;
-    if (lowerQuery.includes('under') || lowerQuery.includes('less') || lowerQuery.includes('below')) filters.budgetMax = budget;
-    else if (lowerQuery.includes('over') || lowerQuery.includes('above') || lowerQuery.includes('more')) filters.budgetMin = budget;
-  }
-  return filters;
-};
-
-const extractDealFilters = (query) => {
-  const lowerQuery = query.toLowerCase();
-  const filters = { dealStage: null };
-  if (lowerQuery.includes('open') || lowerQuery.includes('active') || lowerQuery.includes('pending')) filters.dealStage = 'Negotiation';
-  if (lowerQuery.includes('closed') || lowerQuery.includes('won') || lowerQuery.includes('sold')) filters.dealStage = 'Closed';
-  if (lowerQuery.includes('lost')) filters.dealStage = 'Lost';
-  return filters;
-};
-
-const isMarketKnowledgeQuery = (q) => {
-  const lowerQuery = q.toLowerCase();
-  const marketKeywords = [
-    'average price', 'avg price', 'market price', 'typical price', 'price range',
-    'cost per sqm', 'price per sqm', 'price per square', 'per square meter',
-    'market trends', 'market analysis', 'market value', 'investment potential',
-    'rental yield', 'roi', 'return on investment', 'capital appreciation',
-    'best area', 'best location', 'most expensive', 'cheapest', 'affordable',
-    'is it worth', 'should i buy', 'good investment', 'market forecast',
-    'how much does', 'what is the price', 'what would be the price',
-    'growth rate', 'price appreciation', 'demand', 'supply', 'inventory'
-  ];
-  return marketKeywords.some(k => lowerQuery.includes(k));
-};
-
-const isSpecificPropertySearch = (q) => {
-  const lowerQuery = q.toLowerCase();
-  const searchKeywords = ['show me', 'find me', 'i want', 'looking for', 'need an', 'need a', 'search for', 'list properties', 'available properties'];
-  const hasSearchIntent = searchKeywords.some(k => lowerQuery.includes(k));
-  const hasSpecificCriteria = lowerQuery.includes('under $') || lowerQuery.includes('over $') || lowerQuery.includes('budget') || lowerQuery.includes('max') || lowerQuery.includes('min');
-  return hasSearchIntent && hasSpecificCriteria;
-};
 
 const formatPrice = (p) => p >= 1000000 ? `$${(p / 1000000).toFixed(1)}M` : p >= 1000 ? `$${(p / 1000).toFixed(0)}K` : `$${p}`;
 const fmtProp = (p) => ({ id: p.id, title: p.title, price: formatPrice(Number(p.price)), type: p.type, bedrooms: p.bedrooms, bathrooms: p.bathrooms, area: p.area, city: p.city, image: p.photos?.[0] || null });
@@ -1101,17 +1034,12 @@ exports.aiAssistant = async (req, res) => {
     const isDeal = isDealQuery(message);
     const isRev = isRevenueQuery(message);
     const needsSummary = needsAI(message);
-    const isMarketQuery = isMarketKnowledgeQuery(message);
-    const isSpecificSearch = isSpecificPropertySearch(message);
 
     let propertyResults = null, leadResults = null, dealResults = null, revenueResults = null;
     const whereClause = {};
 
-    // Skip property database search for market knowledge queries (e.g., "average price of apartments")
-    // Use AI's training knowledge for these general market questions
-    if (isProp && !isMarketQuery) {
-      const isCountQuery = isTotalCountQuery(message) && !filters.status && !filters.propertyType && !filters.city && !filters.priceMin && !filters.priceMax;
-      if (filters.priceMin || filters.priceMax || filters.propertyType || filters.city || filters.status || filters.bedrooms || filters.bathrooms || filters.areaMin || filters.areaMax || isSpecificSearch) {
+    if (isProp) {
+      if (filters.priceMin || filters.priceMax || filters.propertyType || filters.city || filters.status || filters.bedrooms || filters.bathrooms) {
         if (filters.priceMin) whereClause.price = { ...whereClause.price, [Op.gte]: filters.priceMin };
         if (filters.priceMax) whereClause.price = { ...whereClause.price, [Op.lte]: filters.priceMax };
         if (filters.propertyType) whereClause.type = filters.propertyType;
@@ -1119,85 +1047,34 @@ exports.aiAssistant = async (req, res) => {
         if (filters.status) whereClause.status = filters.status;
         if (filters.bedrooms) whereClause.bedrooms = { [Op.gte]: filters.bedrooms };
         if (filters.bathrooms) whereClause.bathrooms = { [Op.gte]: filters.bathrooms };
-        if (filters.areaMin) whereClause.area = { ...whereClause.area, [Op.gte]: filters.areaMin };
-        if (filters.areaMax) whereClause.area = { ...whereClause.area, [Op.lte]: filters.areaMax };
-      } else if (!isCountQuery) {
-        whereClause.status = 'Available';
-      }
+      } else whereClause.status = 'Available';
       
-      if (isCountQuery) {
-        const totalCount = await Property.count({ where: whereClause });
-        propertyResults = { count: totalCount, properties: [] };
-      } else {
-        const props = await Property.findAll({ where: whereClause, attributes: ['id', 'title', 'price', 'status', 'city', 'type', 'bedrooms', 'bathrooms', 'area', 'photos'], order: [['price', 'ASC']], limit: 20 });
-        propertyResults = { count: props.length, properties: props.map(fmtProp) };
-      }
+      const props = await Property.findAll({ where: whereClause, attributes: ['id', 'title', 'price', 'status', 'city', 'type', 'bedrooms', 'bathrooms', 'area', 'photos'], order: [['price', 'ASC']], limit: 20 });
+      propertyResults = { count: props.length, properties: props.map(fmtProp) };
     }
 
     if (isLead) {
-      const leadFilters = extractLeadFilters(message);
-      const isLeadCountQuery = isTotalCountQuery(message) && !leadFilters.status && !leadFilters.budgetMin && !leadFilters.budgetMax;
-      const leadWhere = {};
-      if (leadFilters.status) leadWhere.status = leadFilters.status;
-      if (leadFilters.budgetMin) leadWhere.budget = { ...leadWhere.budget, [Op.gte]: leadFilters.budgetMin };
-      if (leadFilters.budgetMax) leadWhere.budget = { ...leadWhere.budget, [Op.lte]: leadFilters.budgetMax };
-      
-      if (isLeadCountQuery) {
-        const totalCount = await Lead.count({ where: leadWhere });
-        const hotCount = await Lead.count({ where: { ...leadWhere, budget: { [Op.gte]: 2000000 } } });
-        leadResults = { total: totalCount, hotCount, byStatus: {}, recent: [] };
-      } else {
-        const leads = await Lead.findAll({ where: leadWhere, attributes: ['id', 'name', 'status', 'budget', 'source'], order: [['createdAt', 'DESC']], limit: 30 });
-        const byStatus = leads.reduce((a, l) => { a[l.status] = (a[l.status] || 0) + 1; return a; }, {});
-        leadResults = { total: leads.length, hotCount: leads.filter(l => l.budget && Number(l.budget) > 2000000).length, byStatus, recent: leads.slice(0, 8).map(l => ({ id: l.id, name: l.name, budget: l.budget ? formatPrice(Number(l.budget)) : '-', status: l.status })) };
-      }
+      const leads = await Lead.findAll({ attributes: ['id', 'name', 'status', 'budget', 'source'], order: [['createdAt', 'DESC']], limit: 30 });
+      const byStatus = leads.reduce((a, l) => { a[l.status] = (a[l.status] || 0) + 1; return a; }, {});
+      leadResults = { total: leads.length, hotCount: leads.filter(l => l.budget && Number(l.budget) > 2000000).length, byStatus, recent: leads.slice(0, 8).map(l => ({ id: l.id, name: l.name, budget: l.budget ? formatPrice(Number(l.budget)) : '-', status: l.status })) };
     }
 
     if (isDeal) {
-      const dealFilters = extractDealFilters(message);
-      const isDealCountQuery = isTotalCountQuery(message) && !dealFilters.dealStage;
-      const dealWhere = {};
-      if (dealFilters.dealStage) dealWhere.dealStage = dealFilters.dealStage;
-      
-      if (isDealCountQuery) {
-        const totalCount = await Deal.count({ where: dealWhere });
-        const openCount = await Deal.count({ where: { dealStage: { [Op.ne]: 'Closed' } } });
-        const closedCount = await Deal.count({ where: { dealStage: 'Closed' } });
-        dealResults = { total: totalCount, open: openCount, closed: closedCount, pipeline: '$0', commissions: '$0' };
-      } else {
-        const deals = await Deal.findAll({ where: dealWhere, attributes: ['id', 'title', 'dealStage', 'commission', 'finalPrice'], order: [['createdAt', 'DESC']], limit: 30 });
-        const open = deals.filter(d => d.dealStage !== 'Closed'), closed = deals.filter(d => d.dealStage === 'Closed');
-        dealResults = { total: deals.length, open: open.length, closed: closed.length, pipeline: formatPrice(open.reduce((s, d) => s + Number(d.finalPrice || 0), 0)), commissions: formatPrice(closed.reduce((s, d) => s + Number(d.commission || 0), 0)) };
-      }
+      const deals = await Deal.findAll({ attributes: ['id', 'title', 'dealStage', 'commission', 'finalPrice'], order: [['createdAt', 'DESC']], limit: 30 });
+      const open = deals.filter(d => d.dealStage !== 'Closed'), closed = deals.filter(d => d.dealStage === 'Closed');
+      dealResults = { total: deals.length, open: open.length, closed: closed.length, pipeline: formatPrice(open.reduce((s, d) => s + Number(d.finalPrice || 0), 0)), commissions: formatPrice(closed.reduce((s, d) => s + Number(d.commission || 0), 0)) };
     }
 
     if (isRev) {
-      const isRevTotalQuery = isTotalCountQuery(message) || message.toLowerCase().includes('total revenue') || message.toLowerCase().includes('total income') || message.toLowerCase().includes('profit');
-      
-      if (isRevTotalQuery) {
-        const { Sequelize } = require('sequelize');
-        const [incomeResult, expenseResult, pendingResult, paidResult] = await Promise.all([
-          Transaction.findAll({ where: { type: 'income' }, attributes: [[Sequelize.fn('SUM', Sequelize.col('amount')), 'total']] }),
-          Transaction.findAll({ where: { type: 'expense' }, attributes: [[Sequelize.fn('SUM', Sequelize.col('amount')), 'total']] }),
-          Commission.findAll({ where: { status: 'pending' }, attributes: [[Sequelize.fn('SUM', Sequelize.col('agentCommission')), 'total']] }),
-          Commission.findAll({ where: { status: 'paid' }, attributes: [[Sequelize.fn('SUM', Sequelize.col('agentCommission')), 'total']] })
-        ]);
-        const income = Number(incomeResult[0]?.dataValues?.total) || 0;
-        const expenses = Number(expenseResult[0]?.dataValues?.total) || 0;
-        const pending = Number(pendingResult[0]?.dataValues?.total) || 0;
-        const paid = Number(paidResult[0]?.dataValues?.total) || 0;
-        revenueResults = { income: formatPrice(income), expenses: formatPrice(expenses), profit: formatPrice(income - expenses), pending: formatPrice(pending), paid: formatPrice(paid) };
-      } else {
-        const [txns, comms] = await Promise.all([
-          Transaction.findAll({ attributes: ['id', 'type', 'amount'] }),
-          Commission.findAll({ attributes: ['id', 'agentCommission', 'status'] })
-        ]);
-        const income = txns.filter(t => t.type === 'income').reduce((s, t) => s + Number(t.amount || 0), 0);
-        const expenses = txns.filter(t => t.type === 'expense').reduce((s, t) => s + Number(t.amount || 0), 0);
-        const pending = comms.filter(c => c.status === 'pending').reduce((s, c) => s + Number(c.agentCommission || 0), 0);
-        const paid = comms.filter(c => c.status === 'paid').reduce((s, c) => s + Number(c.agentCommission || 0), 0);
-        revenueResults = { income: formatPrice(income), expenses: formatPrice(expenses), profit: formatPrice(income - expenses), pending: formatPrice(pending), paid: formatPrice(paid) };
-      }
+      const [txns, comms] = await Promise.all([
+        Transaction.findAll({ attributes: ['id', 'type', 'amount'] }),
+        Commission.findAll({ attributes: ['id', 'agentCommission', 'status'] })
+      ]);
+      const income = txns.filter(t => t.type === 'income').reduce((s, t) => s + Number(t.amount || 0), 0);
+      const expenses = txns.filter(t => t.type === 'expense').reduce((s, t) => s + Number(t.amount || 0), 0);
+      const pending = comms.filter(c => c.status === 'pending').reduce((s, c) => s + Number(c.agentCommission || 0), 0);
+      const paid = comms.filter(c => c.status === 'paid').reduce((s, c) => s + Number(c.agentCommission || 0), 0);
+      revenueResults = { income: formatPrice(income), expenses: formatPrice(expenses), profit: formatPrice(income - expenses), pending: formatPrice(pending), paid: formatPrice(paid) };
     }
 
     const summary = { props: propertyResults?.count || 0, leads: leadResults?.total || 0, deals: dealResults?.total || 0, rev: revenueResults ? true : false };
@@ -1207,7 +1084,7 @@ exports.aiAssistant = async (req, res) => {
     const cacheKey = getCacheKey(message, hasSpecificData);
     const cached = getCached(cacheKey);
     if (cached) { response = cached; }
-    else if (process.env.OPENAI_API_KEY && (hasSpecificData || isMarketQuery)) {
+    else if (process.env.OPENAI_API_KEY && hasSpecificData) {
       try {
         let dataSummary = `Data: ${summary.props} props, ${summary.leads} leads, ${summary.deals} deals`;
         if (propertyResults) dataSummary += `\nProps: ${propertyResults.properties.slice(0, 5).map(p => `${p.title} - ${p.price}`).join(' | ')}`;
@@ -1215,15 +1092,12 @@ exports.aiAssistant = async (req, res) => {
         if (dealResults) dataSummary += `\nDeals: ${dealResults.open} open, ${dealResults.closed} closed`;
         if (revenueResults) dataSummary += `\nRevenue: ${revenueResults.income} income, ${revenueResults.profit} profit`;
 
-        // For market knowledge queries, use AI with general real estate expertise
-        const systemPrompt = isMarketQuery 
-          ? `You are a knowledgeable Lebanese real estate market expert. Answer questions about real estate prices, market trends, rental yields, and investment opportunities in Lebanon using your training knowledge. Be specific about locations like Mount Lebanon, Baabda, Beirut, etc. Include approximate price ranges in USD.`
-          : `RealEdge CRM assistant. ${dataSummary}. ${needsSummary ? 'Give brief insights.' : 'Just list/answer.'} Be concise.`;
+        const systemPrompt = `RealEdge CRM assistant. ${dataSummary}. ${needsSummary ? 'Give brief insights.' : 'Just list/answer.'} Be concise.`;
         
         const completion = await openai.chat.completions.create({
           model: AI_MODEL,
           messages: [{ role: "system", content: systemPrompt }, { role: "user", content: message }],
-          max_tokens: isMarketQuery ? MAX_TOKENS_MEDIUM : (needsSummary ? MAX_TOKENS_MEDIUM : MAX_TOKENS_SHORT)
+          max_tokens: needsSummary ? MAX_TOKENS_MEDIUM : MAX_TOKENS_SHORT
         });
         response = completion.choices[0]?.message?.content || '';
         setCache(cacheKey, response);
