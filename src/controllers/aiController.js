@@ -162,7 +162,7 @@ Location: ${property.city}, ${property.country}
 Features: ${property.features?.join(', ') || 'N/A'}`;
 
     const completion = await openai.chat.completions.create({
-      model: 'gpt-5-nano',
+      model: 'gpt-3.5-turbo',
       messages: [{ role: 'user', content: prompt }],
       max_tokens: 200
     });
@@ -192,7 +192,7 @@ exports.generateMarketingContent = async (req, res) => {
 
     const prompt = prompts[contentType] || prompts.default;
     const completion = await openai.chat.completions.create({
-      model: 'gpt-5-nano',
+      model: 'gpt-3.5-turbo',
       messages: [{ role: 'user', content: prompt }],
       max_tokens: 200
     });
@@ -713,7 +713,7 @@ Features: ${property.features?.join(', ') || 'N/A'}
     if (sections.includes('ad') || sections.includes('all')) {
       try {
         const completion = await openai.chat.completions.create({
-          model: "gpt-5-nano",
+          model: "gpt-3.5-turbo",
           messages: [{
             role: "system",
             content: "Write ad copy for Google/Facebook ads."
@@ -778,7 +778,7 @@ Status: ${lead.status}
     if (process.env.OPENAI_API_KEY) {
       try {
         const completion = await openai.chat.completions.create({
-          model: "gpt-5-nano",
+          model: "gpt-3.5-turbo",
           messages: [{
             role: "system",
             content: "Write personalized client communications."
@@ -842,7 +842,7 @@ exports.generateMarketReport = async (req, res) => {
 
       try {
         const completion = await openai.chat.completions.create({
-          model: "gpt-5-nano",
+          model: "gpt-3.5-turbo",
           messages: [{
             role: "system",
             content: "Real estate market analyst."
@@ -931,7 +931,7 @@ exports.getInvestmentRecommendations = async (req, res) => {
     if (process.env.OPENAI_API_KEY && recommendations.length > 0) {
       try {
         const completion = await openai.chat.completions.create({
-          model: "gpt-5-nano",
+          model: "gpt-3.5-turbo",
           messages: [{
             role: "system",
             content: "Real estate investment advisor."
@@ -960,7 +960,7 @@ exports.getInvestmentRecommendations = async (req, res) => {
 
 const { Op } = require('sequelize');
 
-const AI_MODEL = 'gpt-5-nano';
+const AI_MODEL = 'gpt-3.5-turbo';
 const MAX_TOKENS_SHORT = 150;
 const MAX_TOKENS_MEDIUM = 300;
 
