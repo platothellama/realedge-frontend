@@ -1,18 +1,21 @@
-const { Commission, Deal, Property, User } = require('../models/associations');
+const { Commission, Deal, Property, User, Team } = require('../models/associations');
 
 exports.getCommissions = async (req, res) => {
   try {
-    const { status, agentId } = req.query;
+    const { status, agentId, teamId } = req.query;
     let where = {};
     if (status) where.status = status;
     if (agentId) where.agentId = agentId;
+    if (teamId) where.teamId = teamId;
 
     const commissions = await Commission.findAll({
       where,
       include: [
         { model: Deal, as: 'deal', attributes: ['id', 'title'] },
         { model: Property, as: 'property', attributes: ['id', 'title'] },
-        { model: User, as: 'agent', attributes: ['id', 'name', 'photo'] }
+        { model: User, as: 'agent', attributes: ['id', 'name', 'photo'] },
+        { model: User, as: 'agent2', attributes: ['id', 'name', 'photo'] },
+        { model: Team, as: 'team', attributes: ['id', 'name', 'commissionSplit'] }
       ],
       order: [['createdAt', 'DESC']]
     });
@@ -25,10 +28,20 @@ exports.getCommissions = async (req, res) => {
 
 exports.calculateCommission = async (req, res) => {
   try {
-    const { dealId, agentSharePercentage } = req.body;
+    const { 
+      dealId, 
+      agentSharePercentage = 60, 
+      agent2Id, 
+      agent2SharePercentage = 0,
+      teamId,
+      companySharePercentage = 40 
+    } = req.body;
 
     const deal = await Deal.findByPk(dealId, {
-      include: [{ model: Property, as: 'property' }]
+      include: [
+        { model: Property, as: 'property' },
+        { model: Team, as: 'team' }
+      ]
     });
     
     if (!deal) return res.status(404).json({ message: 'Deal not found' });
@@ -36,16 +49,44 @@ exports.calculateCommission = async (req, res) => {
     const salePrice = deal.finalPrice;
     const commissionPercentage = deal.commission || 2;
     const grossCommission = salePrice * (commissionPercentage / 100);
-    const agentShare = agentSharePercentage || 60;
-    const agentCommission = grossCommission * (agentShare / 100);
-    const officeCommission = grossCommission - agentCommission;
+
+    let splitType = 'single';
+    let agentCommission = 0;
+    let agent2Commission = 0;
+    let teamCommission = 0;
+    let officeCommission = 0;
+
+    if (agent2Id && agent2SharePercentage > 0) {
+      splitType = 'multi_agent';
+      agentCommission = grossCommission * (agentSharePercentage / 100);
+      agent2Commission = grossCommission * (agent2SharePercentage / 100);
+      officeCommission = grossCommission - agentCommission - agent2Commission;
+    } else if (teamId) {
+      splitType = 'team';
+      const team = await Team.findByPk(teamId);
+      const teamSplit = team?.commissionSplit || 60;
+      const agentPortion = agentSharePercentage * (teamSplit / 100);
+      agentCommission = grossCommission * (agentPortion / 100);
+      teamCommission = grossCommission * ((100 - teamSplit) / 100);
+      officeCommission = grossCommission - agentCommission - teamCommission;
+    } else {
+      agentCommission = grossCommission * (agentSharePercentage / 100);
+      officeCommission = grossCommission - agentCommission;
+    }
 
     res.status(200).json({
       salePrice,
       commissionPercentage,
       grossCommission,
-      agentSharePercentage: agentShare,
+      splitType,
+      agentSharePercentage,
       agentCommission,
+      agent2Id: agent2Id || null,
+      agent2SharePercentage: agent2SharePercentage || 0,
+      agent2Commission: agent2Commission || 0,
+      teamId: teamId || null,
+      teamCommission: teamCommission || 0,
+      companySharePercentage,
       officeCommission
     });
   } catch (error) {
@@ -55,22 +96,60 @@ exports.calculateCommission = async (req, res) => {
 
 exports.createCommission = async (req, res) => {
   try {
-    const { dealId, agentId, salePrice, commissionPercentage, agentSharePercentage } = req.body;
+    const { 
+      dealId, 
+      agentId, 
+      salePrice, 
+      commissionPercentage, 
+      agentSharePercentage = 60,
+      agent2Id,
+      agent2SharePercentage = 0,
+      teamId,
+      companySharePercentage = 40
+    } = req.body;
 
     const grossCommission = salePrice * (commissionPercentage / 100);
-    const agentShare = agentSharePercentage || 60;
-    const agentCommission = grossCommission * (agentShare / 100);
-    const officeCommission = grossCommission - agentCommission;
+    let splitType = 'single';
+    let agentCommission = 0;
+    let agent2Commission = 0;
+    let teamCommission = 0;
+    let officeCommission = 0;
+
+    if (agent2Id && agent2SharePercentage > 0) {
+      splitType = 'multi_agent';
+      agentCommission = grossCommission * (agentSharePercentage / 100);
+      agent2Commission = grossCommission * (agent2SharePercentage / 100);
+      officeCommission = grossCommission - agentCommission - agent2Commission;
+    } else if (teamId) {
+      splitType = 'team';
+      const team = await Team.findByPk(teamId);
+      const teamSplit = team?.commissionSplit || 60;
+      const agentPortion = agentSharePercentage * (teamSplit / 100);
+      agentCommission = grossCommission * (agentPortion / 100);
+      teamCommission = grossCommission * ((100 - teamSplit) / 100);
+      officeCommission = grossCommission - agentCommission - teamCommission;
+    } else {
+      agentCommission = grossCommission * (agentSharePercentage / 100);
+      officeCommission = grossCommission - agentCommission;
+    }
 
     const commission = await Commission.create({
       dealId,
       agentId,
       propertyId: req.body.propertyId,
+      teamId,
       salePrice,
       commissionPercentage,
       grossCommission,
-      agentSharePercentage: agentShare,
+      splitType,
+      agentSharePercentage,
       agentCommission,
+      agent2Id: agent2Id || null,
+      agent2SharePercentage: agent2SharePercentage || 0,
+      agent2Commission: agent2Commission || 0,
+      teamSharePercentage: teamId ? 100 - (team?.commissionSplit || 60) : 0,
+      teamCommission: teamCommission || 0,
+      companySharePercentage,
       officeCommission,
       status: 'pending'
     });
@@ -108,13 +187,15 @@ exports.getCommissionStats = async (req, res) => {
   try {
     const { Op } = require('sequelize');
     
-    const [totalPending, totalApproved, totalPaid, pendingCount, approvedCount, paidCount] = await Promise.all([
+    const [totalPending, totalApproved, totalPaid, pendingCount, approvedCount, paidCount, officeTotal, teamTotal] = await Promise.all([
       Commission.sum('agentCommission', { where: { status: 'pending' } }),
       Commission.sum('agentCommission', { where: { status: 'approved' } }),
       Commission.sum('agentCommission', { where: { status: { [Op.in]: ['paid', 'disbursed'] } } }),
       Commission.count({ where: { status: 'pending' } }),
       Commission.count({ where: { status: 'approved' } }),
-      Commission.count({ where: { status: { [Op.in]: ['paid', 'disbursed'] } } })
+      Commission.count({ where: { status: { [Op.in]: ['paid', 'disbursed'] } } }),
+      Commission.sum('officeCommission', { where: { status: { [Op.in]: ['paid', 'disbursed'] } } }),
+      Commission.sum('teamCommission', { where: { status: { [Op.in]: ['paid', 'disbursed'] } } })
     ]);
 
     const byAgent = await Commission.findAll({
@@ -125,7 +206,7 @@ exports.getCommissionStats = async (req, res) => {
     });
 
     const byStatus = await Commission.findAll({
-      attributes: ['status', [require('sequelize').fn('COUNT', require('sequelize').col('id')), 'count'], [require('sequelize').fn('SUM', require('sequelize').col('agentCommission')), 'total']],
+      attributes: ['status', [require('sequelize').fn('COUNT', require('sequelize').col('id')), 'count'], [require('sequelize').fn('SUM', require('sequelize').col('grossCommission')), 'total']],
       group: ['status']
     });
 
@@ -144,6 +225,8 @@ exports.getCommissionStats = async (req, res) => {
       totalPending: totalPending || 0,
       totalApproved: totalApproved || 0,
       totalPaid: totalPaid || 0,
+      officeTotal: officeTotal || 0,
+      teamTotal: teamTotal || 0,
       pendingCount: pendingCount || 0,
       approvedCount: approvedCount || 0,
       paidCount: paidCount || 0,

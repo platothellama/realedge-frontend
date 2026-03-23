@@ -24,6 +24,8 @@ const TransactionWorkflow = require('./transactionWorkflow');
 const AuditLog = require('./auditLog');
 const Team = require('./team');
 const EmailTracking = require('./emailTracking');
+const Payment = require('./payment');
+const PaymentPlan = require('./paymentPlan');
 const { WebsiteVisitor, WebsiteVisit } = require('./websiteVisitor');
 const { Website, WebsitePage, WebsiteSection, ComponentTemplate, WebsiteProperty, LayoutTemplate } = require('./website');
 
@@ -129,6 +131,13 @@ User.hasMany(Transaction, { foreignKey: 'userId', as: 'transactions' });
 Commission.belongsTo(User, { foreignKey: 'agentId', as: 'agent' });
 User.hasMany(Commission, { foreignKey: 'agentId', as: 'commissions' });
 
+// Commission - User Relation (Agent 2 - Co-listing)
+Commission.belongsTo(User, { foreignKey: 'agent2Id', as: 'agent2' });
+
+// Commission - Team Relation
+Commission.belongsTo(Team, { foreignKey: 'teamId', as: 'team' });
+Team.hasMany(Commission, { foreignKey: 'teamId', as: 'commissions' });
+
 // Commission - Deal Relation
 Commission.belongsTo(Deal, { foreignKey: 'dealId', as: 'deal' });
 Deal.hasMany(Commission, { foreignKey: 'dealId', as: 'commissions' });
@@ -183,6 +192,16 @@ WebsiteProperty.belongsTo(Website, { foreignKey: 'websiteId' });
 WebsiteProperty.belongsTo(Property, { foreignKey: 'propertyId', as: 'property' });
 Property.hasMany(WebsiteProperty, { foreignKey: 'propertyId', as: 'websiteListings' });
 
+// Payment - Deal Relations
+Payment.belongsTo(Deal, { foreignKey: 'dealId', as: 'deal' });
+Deal.hasMany(Payment, { foreignKey: 'dealId', as: 'payments' });
+Payment.belongsTo(User, { foreignKey: 'recordedByUserId', as: 'recorder' });
+
+// PaymentPlan - Deal Relations
+PaymentPlan.belongsTo(Deal, { foreignKey: 'dealId', as: 'deal' });
+Deal.hasMany(PaymentPlan, { foreignKey: 'dealId', as: 'paymentPlans' });
+PaymentPlan.belongsTo(User, { foreignKey: 'createdByUserId', as: 'creator' });
+
 module.exports = {
   Property,
   PropertyEmbedding,
@@ -217,5 +236,7 @@ module.exports = {
   WebsiteSection,
   ComponentTemplate,
   WebsiteProperty,
-  LayoutTemplate
+  LayoutTemplate,
+  Payment,
+  PaymentPlan
 };

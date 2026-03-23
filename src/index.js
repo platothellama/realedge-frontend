@@ -18,6 +18,7 @@ const invoiceRoutes = require('./routes/invoiceRoutes');
 const expenseRoutes = require('./routes/expenseRoutes');
 const taskRoutes = require('./routes/taskRoutes');
 const commissionRoutes = require('./routes/commissionRoutes');
+const teamRoutes = require('./routes/teamRoutes');
 const marketRoutes = require('./routes/marketRoutes');
 const transactionRoutes = require('./routes/transactionRoutes');
 const announcementRoutes = require('./routes/announcementRoutes');
@@ -28,6 +29,7 @@ const websiteRoutes = require('./routes/websiteRoutes');
 const trackRoutes = require('./routes/trackRoutes');
 const adminRoutes = require('./routes/adminRoutes');
 const featureFlagRoutes = require('./routes/featureFlagRoutes');
+const paymentRoutes = require('./routes/paymentRoutes');
 const upload = require('./middleware/uploadMiddleware');
 const { protect } = require('./middleware/authMiddleware');
 require('./models/associations');
@@ -56,6 +58,7 @@ app.use('/api/invoices', invoiceRoutes);
 app.use('/api/expenses', expenseRoutes);
 app.use('/api/tasks', taskRoutes);
 app.use('/api/commissions', commissionRoutes);
+app.use('/api/teams', teamRoutes);
 app.use('/api/market', marketRoutes);
 app.use('/api/transactions', transactionRoutes);
 app.use('/api/announcements', announcementRoutes);
@@ -67,6 +70,7 @@ app.use('/api/websites', websiteRoutes);
 app.use('/api/track', trackRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/features', featureFlagRoutes);
+app.use('/api/payments', paymentRoutes);
 
 // Direct Upload Route (Fallback)
 app.post('/api/properties/upload', protect, upload.single('image'), (req, res) => {
