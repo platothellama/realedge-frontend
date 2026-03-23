@@ -25,8 +25,8 @@ const Deal = sequelize.define('Deal', {
     defaultValue: 0
   },
   dealStage: {
-    type: DataTypes.ENUM('Offer Made', 'Negotiation', 'Contract Signed', 'Payment', 'Closed'),
-    defaultValue: 'Offer Made'
+    type: DataTypes.ENUM('Negotiation', 'Reserved', 'Contract Signed', 'Payment', 'Closed'),
+    defaultValue: 'Negotiation'
   },
   notes: {
     type: DataTypes.TEXT,

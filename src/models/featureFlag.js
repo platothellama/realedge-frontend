@@ -3,8 +3,8 @@ const { sequelize } = require('../config/database');
 
 const FeatureFlag = sequelize.define('FeatureFlag', {
   id: {
-    type: DataTypes.UUID,
-    defaultValue: DataTypes.UUIDV4,
+    type: DataTypes.INTEGER,
+    autoIncrement: true,
     primaryKey: true
   },
   key: {

@@ -86,7 +86,9 @@ exports.createDeal = async (req, res) => {
 
 exports.updateDeal = async (req, res) => {
   try {
-    const deal = await Deal.findByPk(req.params.id);
+    const deal = await Deal.findByPk(req.params.id, {
+      include: [{ model: Property, as: 'property' }]
+    });
     if (!deal) return res.status(404).json({ message: 'Deal not found' });
 
     const userRole = req.user.role;
@@ -105,6 +107,17 @@ exports.updateDeal = async (req, res) => {
     }
 
     await deal.update(updateData);
+
+    // Property locking: when deal reaches Reserved stage
+    if (updateData.dealStage === 'Reserved' && deal.property) {
+      await deal.property.update({ status: 'Reserved' });
+    }
+
+    // Release property: when deal is lost (Closed with no payment) or deleted
+    if (updateData.dealStage === 'Closed' && deal.property && deal.property.status === 'Reserved') {
+      await deal.property.update({ status: 'Available' });
+    }
+
     res.status(200).json(deal);
   } catch (error) {
     res.status(400).json({ message: 'Error updating deal', error: error.message });

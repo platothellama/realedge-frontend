@@ -10,5 +10,6 @@ router.get('/:id', leadController.getLeadById);
 router.post('/', leadController.createLead);
 router.put('/:id', leadController.updateLead);
 router.delete('/:id', leadController.deleteLead);
+router.post('/:id/convert-to-deal', leadController.convertToDeal);
 
 module.exports = router;

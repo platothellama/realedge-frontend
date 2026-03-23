@@ -1,4 +1,58 @@
-const { Lead, PriceHistory, Property, User, Visit } = require('../models/associations');
+const { Lead, PriceHistory, Property, User, Visit, Deal } = require('../models/associations');
+
+exports.convertToDeal = async (req, res) => {
+  try {
+    const lead = await Lead.findByPk(req.params.id, {
+      include: [
+        { model: User, as: 'assignedUser', attributes: ['id', 'name'] }
+      ]
+    });
+    
+    if (!lead) return res.status(404).json({ message: 'Lead not found' });
+
+    const userRole = req.user.role;
+    const userId = req.user.id;
+    if (userRole !== 'Super Admin' && userRole !== 'Admin' && lead.assignedToUserId !== userId) {
+      return res.status(403).json({ message: 'Access denied: This lead is not assigned to you' });
+    }
+
+    const { propertyId, finalPrice, sellerName } = req.body;
+    if (!propertyId) {
+      return res.status(400).json({ message: 'Property ID is required to convert to deal' });
+    }
+
+    const property = await Property.findByPk(propertyId);
+    if (!property) {
+      return res.status(404).json({ message: 'Property not found' });
+    }
+
+    let commission = 0;
+    if (property.commissionPercentage > 0) {
+      commission = (Number(property.price) * property.commissionPercentage) / 100;
+    }
+
+    const deal = await Deal.create({
+      title: `${lead.name} - ${property.title}`,
+      buyerName: lead.name,
+      sellerName: sellerName || 'Not specified',
+      propertyId: propertyId,
+      brokerId: lead.assignedToUserId || userId,
+      buyerLeadId: lead.id,
+      finalPrice: finalPrice || property.price,
+      commission: commission,
+      dealStage: 'Negotiation'
+    });
+
+    await lead.update({ status: 'Closed Deal' });
+
+    res.status(201).json({ 
+      message: 'Lead converted to deal successfully', 
+      deal: deal 
+    });
+  } catch (error) {
+    res.status(500).json({ message: 'Error converting lead to deal', error: error.message });
+  }
+};
 
 exports.getAllLeads = async (req, res) => {
   try {
