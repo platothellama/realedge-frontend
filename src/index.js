@@ -27,6 +27,7 @@ const operationsRoutes = require('./routes/operationsRoutes');
 const websiteRoutes = require('./routes/websiteRoutes');
 const trackRoutes = require('./routes/trackRoutes');
 const adminRoutes = require('./routes/adminRoutes');
+const featureFlagRoutes = require('./routes/featureFlagRoutes');
 const upload = require('./middleware/uploadMiddleware');
 const { protect } = require('./middleware/authMiddleware');
 require('./models/associations');
@@ -65,6 +66,7 @@ app.use('/api/operations', operationsRoutes);
 app.use('/api/websites', websiteRoutes);
 app.use('/api/track', trackRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/features', featureFlagRoutes);
 
 // Direct Upload Route (Fallback)
 app.post('/api/properties/upload', protect, upload.single('image'), (req, res) => {
@@ -111,6 +113,14 @@ const startServer = async () => {
     await seedComponentTemplates();
   } catch (err) {
     console.log('⚠️  Component templates seeding skipped');
+  }
+
+  // Seed feature flags
+  try {
+    const seedFeatureFlags = require('./seeders/featureFlagSeeder');
+    await seedFeatureFlags();
+  } catch (err) {
+    console.log('⚠️  Feature flags seeding skipped');
   }
 
   app.listen(PORT, () => {
