@@ -123,10 +123,6 @@ const Property = sequelize.define('Property', {
   marketValue: {
     type: DataTypes.DECIMAL(15, 2),
     allowNull: true
-  },
-  sellerId: {
-    type: DataTypes.UUID,
-    allowNull: true
   }
 }, {
   timestamps: true

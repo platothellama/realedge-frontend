@@ -12,12 +12,28 @@ const Document = sequelize.define('Document', {
     allowNull: false
   },
   type: {
-    type: DataTypes.ENUM('Contract', 'Property Paper', 'Client ID', 'Permit', 'Other'),
+    type: DataTypes.ENUM(
+      'Title Deed',
+      'Floor Plan',
+      'Property Photos',
+      'Ownership Proof',
+      'Reservation Form',
+      'Sales Agreement',
+      'Contract',
+      'Payment Receipt',
+      'ID / Passport',
+      'Proof of Funds',
+      'Other'
+    ),
     defaultValue: 'Other'
   },
   status: {
     type: DataTypes.ENUM('Draft', 'Pending Signature', 'Signed', 'Expired', 'Archived'),
     defaultValue: 'Draft'
+  },
+  visibility: {
+    type: DataTypes.ENUM('internal', 'shareable'),
+    defaultValue: 'internal'
   },
   currentVersion: {
     type: DataTypes.INTEGER,
@@ -31,6 +47,14 @@ const Document = sequelize.define('Document', {
     type: DataTypes.UUID,
     allowNull: true
   },
+  sellerId: {
+    type: DataTypes.UUID,
+    allowNull: true
+  },
+  teamUserId: {
+    type: DataTypes.UUID,
+    allowNull: true
+  },
   uploadedByUserId: {
     type: DataTypes.UUID,
     allowNull: false
@@ -39,12 +63,28 @@ const Document = sequelize.define('Document', {
     type: DataTypes.BOOLEAN,
     defaultValue: false
   },
+  signers: {
+    type: DataTypes.JSONB,
+    defaultValue: []
+  },
+  signatureTokens: {
+    type: DataTypes.JSONB,
+    defaultValue: {}
+  },
+  notes: {
+    type: DataTypes.TEXT,
+    allowNull: true
+  },
   signedAt: {
     type: DataTypes.DATE,
     allowNull: true
   },
   signedByUserId: {
     type: DataTypes.UUID,
+    allowNull: true
+  },
+  signatureHash: {
+    type: DataTypes.STRING,
     allowNull: true
   }
 }, {

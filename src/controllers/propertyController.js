@@ -1,4 +1,4 @@
-const { Property, PriceHistory, User, Group, Lead, Seller } = require('../models/associations');
+const { Property, PriceHistory, User, Group, Lead } = require('../models/associations');
 const { Op } = require('sequelize');
 
 exports.getAllProperties = async (req, res) => {
@@ -58,8 +58,7 @@ exports.getAllProperties = async (req, res) => {
           include: [{ model: Lead, as: 'lead', attributes: ['id', 'name', 'email'] }]
         },
         { model: User, as: 'assignedUser', attributes: ['id', 'name', 'email'] },
-        { model: Group, as: 'assignedGroup', attributes: ['id', 'name'] },
-        { model: Seller, as: 'seller', attributes: ['id', 'name', 'email', 'phone'] }
+        { model: Group, as: 'assignedGroup', attributes: ['id', 'name'] }
       ],
       order: [['createdAt', 'DESC']],
       limit,
@@ -94,8 +93,7 @@ exports.getPropertyById = async (req, res) => {
           include: [{ model: Lead, as: 'lead', attributes: ['id', 'name', 'email'] }]
         },
         { model: User, as: 'assignedUser', attributes: ['id', 'name', 'email'] },
-        { model: Group, as: 'assignedGroup', attributes: ['id', 'name'] },
-        { model: Seller, as: 'seller', attributes: ['id', 'name', 'email', 'phone'] }
+        { model: Group, as: 'assignedGroup', attributes: ['id', 'name'] }
       ]
     });
     if (!property) return res.status(404).json({ message: 'Property not found' });

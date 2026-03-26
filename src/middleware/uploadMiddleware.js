@@ -2,7 +2,6 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 
-// Ensure uploads directory exists
 const uploadDir = path.join(__dirname, '../../uploads');
 if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir, { recursive: true });
@@ -19,20 +18,19 @@ const storage = multer.diskStorage({
 });
 
 const fileFilter = (req, file, cb) => {
-  const allowedTypes = /jpeg|jpg|png|webp|gif/;
+  const allowedTypes = /jpeg|jpg|png|webp|gif|pdf|doc|docx|xls|xlsx/;
   const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
-  const mimetype = allowedTypes.test(file.mimetype);
 
-  if (extname && mimetype) {
+  if (extname) {
     return cb(null, true);
   } else {
-    cb(new Error('Only images are allowed (jpeg, jpg, png, webp, gif)'));
+    cb(new Error('File type not allowed'));
   }
 };
 
 const upload = multer({
   storage: storage,
-  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
+  limits: { fileSize: 10 * 1024 * 1024 },
   fileFilter: fileFilter
 });
 

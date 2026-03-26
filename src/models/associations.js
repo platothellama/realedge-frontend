@@ -10,6 +10,7 @@ const Deal = require('./deal');
 const Visit = require('./visit');
 const Document = require('./document');
 const DocumentVersion = require('./documentVersion');
+const DocumentSignature = require('./documentSignature');
 const Notification = require('./notification');
 const Transaction = require('./transaction');
 const Commission = require('./commission');
@@ -26,7 +27,6 @@ const Team = require('./team');
 const EmailTracking = require('./emailTracking');
 const Payment = require('./payment');
 const PaymentPlan = require('./paymentPlan');
-const Seller = require('./seller');
 const { WebsiteVisitor, WebsiteVisit } = require('./websiteVisitor');
 const { Website, WebsitePage, WebsiteSection, ComponentTemplate, WebsiteProperty, LayoutTemplate } = require('./website');
 
@@ -67,10 +67,6 @@ Property.belongsTo(User, { foreignKey: 'assignedToUserId', as: 'assignedUser' })
 Property.belongsTo(Group, { foreignKey: 'assignedToGroupId', as: 'assignedGroup' });
 User.hasMany(Property, { foreignKey: 'assignedToUserId', as: 'properties' });
 Group.hasMany(Property, { foreignKey: 'assignedToGroupId', as: 'properties' });
-
-// Property - Seller Relation
-Property.belongsTo(Seller, { foreignKey: 'sellerId', as: 'seller' });
-Seller.hasMany(Property, { foreignKey: 'sellerId', as: 'properties' });
 
 // Lead - Group Relation
 Lead.belongsTo(Group, { foreignKey: 'groupId', as: 'group' });
@@ -123,6 +119,10 @@ DocumentVersion.belongsTo(Document, { foreignKey: 'documentId' });
 
 // DocumentVersion - User Relation
 DocumentVersion.belongsTo(User, { foreignKey: 'uploadedByUserId', as: 'uploader' });
+
+// Document - DocumentSignature Relation
+Document.hasMany(DocumentSignature, { foreignKey: 'documentId', as: 'signatures' });
+DocumentSignature.belongsTo(Document, { foreignKey: 'documentId' });
 
 // Notification - User Relation
 Notification.belongsTo(User, { foreignKey: 'userId', as: 'user' });
@@ -244,5 +244,5 @@ module.exports = {
   LayoutTemplate,
   Payment,
   PaymentPlan,
-  Seller
+  DocumentSignature
 };
