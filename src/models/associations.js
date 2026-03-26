@@ -11,6 +11,7 @@ const Visit = require('./visit');
 const Document = require('./document');
 const DocumentVersion = require('./documentVersion');
 const DocumentSignature = require('./documentSignature');
+const Seller = require('./seller');
 const Notification = require('./notification');
 const Transaction = require('./transaction');
 const Commission = require('./commission');
@@ -112,6 +113,17 @@ Document.belongsTo(User, { foreignKey: 'uploadedByUserId', as: 'uploader' });
 // Document - Deal Relation
 Document.belongsTo(Deal, { foreignKey: 'dealId', as: 'deal' });
 Deal.hasMany(Document, { foreignKey: 'dealId', as: 'documents' });
+
+// Document - Seller Relation
+Document.belongsTo(Seller, { foreignKey: 'sellerId', as: 'seller' });
+Seller.hasMany(Document, { foreignKey: 'sellerId', as: 'documents' });
+
+// Document - Team Relation
+Document.belongsTo(Team, { foreignKey: 'teamUserId', as: 'team' });
+
+// Seller - Property Relation
+Seller.hasMany(Property, { foreignKey: 'sellerId', as: 'properties' });
+Property.belongsTo(Seller, { foreignKey: 'sellerId', as: 'seller' });
 
 // DocumentVersion - Document Relation
 Document.hasMany(DocumentVersion, { foreignKey: 'documentId', as: 'versions' });
@@ -244,5 +256,6 @@ module.exports = {
   LayoutTemplate,
   Payment,
   PaymentPlan,
-  DocumentSignature
+  DocumentSignature,
+  Seller
 };
