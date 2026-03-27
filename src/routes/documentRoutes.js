@@ -10,6 +10,8 @@ router.get('/', documentController.getDocuments);
 router.post('/upload', upload.single('file'), documentController.uploadDocument);
 router.post('/:id/version', upload.single('file'), documentController.addVersion);
 router.post('/:id/sign', documentController.signDocument);
+router.post('/:id/generate-signing-link', documentController.generateSigningLink);
+router.post('/sign/:id/:token', documentController.signDocumentByToken);
 router.delete('/:id', documentController.deleteDocument);
 
 module.exports = router;

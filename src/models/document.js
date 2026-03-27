@@ -39,6 +39,35 @@ const Document = sequelize.define('Document', {
     type: DataTypes.BOOLEAN,
     defaultValue: false
   },
+  visibility: {
+    type: DataTypes.ENUM('internal', 'shareable'),
+    defaultValue: 'shareable'
+  },
+  signerClient: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: false
+  },
+  signerAgent: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: false
+  },
+  signerOwner: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: false
+  },
+  signatureStatus: {
+    type: DataTypes.ENUM('pending', 'signed'),
+    defaultValue: 'pending'
+  },
+  signingToken: {
+    type: DataTypes.UUID,
+    allowNull: true,
+    unique: true
+  },
+  signingLinkExpiresAt: {
+    type: DataTypes.DATE,
+    allowNull: true
+  },
   signedAt: {
     type: DataTypes.DATE,
     allowNull: true
