@@ -29,6 +29,7 @@ const trackRoutes = require('./routes/trackRoutes');
 const adminRoutes = require('./routes/adminRoutes');
 const featureFlagRoutes = require('./routes/featureFlagRoutes');
 const paymentRoutes = require('./routes/paymentRoutes');
+const publicDocumentRoutes = require('./routes/publicDocumentRoutes');
 const upload = require('./middleware/uploadMiddleware');
 const { protect } = require('./middleware/authMiddleware');
 require('./models/associations');
@@ -69,6 +70,7 @@ app.use('/api/track', trackRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/features', featureFlagRoutes);
 app.use('/api/payments', paymentRoutes);
+app.use('/api/documents/public', publicDocumentRoutes);
 
 // Direct Upload Route (Fallback)
 app.post('/api/properties/upload', protect, upload.single('image'), (req, res) => {
