@@ -109,10 +109,6 @@ Document.belongsTo(User, { foreignKey: 'uploadedByUserId', as: 'uploader' });
 Document.belongsTo(User, { foreignKey: 'userId', as: 'user' });
 User.hasMany(Document, { foreignKey: 'userId', as: 'userDocuments' });
 
-// Document - Group Relation
-Document.belongsTo(Group, { foreignKey: 'groupId', as: 'group' });
-Group.hasMany(Document, { foreignKey: 'groupId', as: 'documents' });
-
 // Group - User Relations
 Group.belongsTo(User, { foreignKey: 'leaderId', as: 'leader' });
 
@@ -145,10 +141,6 @@ User.hasMany(Commission, { foreignKey: 'agentId', as: 'commissions' });
 
 // Commission - User Relation (Agent 2 - Co-listing)
 Commission.belongsTo(User, { foreignKey: 'agent2Id', as: 'agent2' });
-
-// Commission - Group Relation
-Commission.belongsTo(Group, { foreignKey: 'groupId', as: 'group' });
-Group.hasMany(Commission, { foreignKey: 'groupId', as: 'commissions' });
 
 // Commission - Deal Relation
 Commission.belongsTo(Deal, { foreignKey: 'dealId', as: 'deal' });

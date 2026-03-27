@@ -8,7 +8,7 @@ exports.uploadDocument = async (req, res) => {
       return res.status(400).json({ message: 'No file uploaded' });
     }
 
-    const { title, type, propertyId, dealId, isDigitalSignatureEnabled, userId: connectedUserId, groupId } = req.body;
+    const { title, type, propertyId, dealId, isDigitalSignatureEnabled, userId: connectedUserId } = req.body;
     const userId = req.user.id;
 
     // Create the Document record
@@ -19,8 +19,7 @@ exports.uploadDocument = async (req, res) => {
       dealId: dealId || null,
       uploadedByUserId: userId,
       isDigitalSignatureEnabled: isDigitalSignatureEnabled === 'true',
-      userId: connectedUserId || null,
-      groupId: groupId || null
+      userId: connectedUserId || null
     });
 
     // Create the first version
@@ -79,14 +78,11 @@ exports.addVersion = async (req, res) => {
 
 exports.getDocuments = async (req, res) => {
   try {
-    const { propertyId, dealId, userId, groupId } = req.query;
+    const { propertyId, dealId, userId } = req.query;
     let where = {};
     if (propertyId) where.propertyId = propertyId;
     if (dealId) where.dealId = dealId;
     if (userId) where.userId = userId;
-    if (groupId) where.groupId = groupId;
-
-    const { Group } = require('../models/associations');
 
     const documents = await Document.findAll({
       where,
@@ -97,8 +93,7 @@ exports.getDocuments = async (req, res) => {
           include: [{ model: User, as: 'uploader', attributes: ['name'] }]
         },
         { model: User, as: 'uploader', attributes: ['name'] },
-        { model: User, as: 'user', attributes: ['id', 'name', 'email'] },
-        { model: Group, as: 'group', attributes: ['id', 'name'] }
+        { model: User, as: 'user', attributes: ['id', 'name', 'email'] }
       ],
       order: [['updatedAt', 'DESC']]
     });

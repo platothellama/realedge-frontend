@@ -1,12 +1,11 @@
-const { Commission, Deal, Property, User, Group } = require('../models/associations');
+const { Commission, Deal, Property, User } = require('../models/associations');
 
 exports.getCommissions = async (req, res) => {
   try {
-    const { status, agentId, groupId } = req.query;
+    const { status, agentId } = req.query;
     let where = {};
     if (status) where.status = status;
     if (agentId) where.agentId = agentId;
-    if (groupId) where.groupId = groupId;
 
     const commissions = await Commission.findAll({
       where,
@@ -14,8 +13,7 @@ exports.getCommissions = async (req, res) => {
         { model: Deal, as: 'deal', attributes: ['id', 'title'] },
         { model: Property, as: 'property', attributes: ['id', 'title'] },
         { model: User, as: 'agent', attributes: ['id', 'name', 'photo'] },
-        { model: User, as: 'agent2', attributes: ['id', 'name', 'photo'] },
-        { model: Group, as: 'group', attributes: ['id', 'name', 'commissionSplit'] }
+        { model: User, as: 'agent2', attributes: ['id', 'name', 'photo'] }
       ],
       order: [['createdAt', 'DESC']]
     });
@@ -33,14 +31,12 @@ exports.calculateCommission = async (req, res) => {
       agentSharePercentage = 60, 
       agent2Id, 
       agent2SharePercentage = 0,
-      groupId,
       companySharePercentage = 40 
     } = req.body;
 
     const deal = await Deal.findByPk(dealId, {
       include: [
-        { model: Property, as: 'property' },
-        { model: Group, as: 'group' }
+        { model: Property, as: 'property' }
       ]
     });
     
@@ -53,7 +49,6 @@ exports.calculateCommission = async (req, res) => {
     let splitType = 'single';
     let agentCommission = 0;
     let agent2Commission = 0;
-    let groupCommission = 0;
     let officeCommission = 0;
 
     if (agent2Id && agent2SharePercentage > 0) {
@@ -61,14 +56,6 @@ exports.calculateCommission = async (req, res) => {
       agentCommission = grossCommission * (agentSharePercentage / 100);
       agent2Commission = grossCommission * (agent2SharePercentage / 100);
       officeCommission = grossCommission - agentCommission - agent2Commission;
-    } else if (groupId) {
-      splitType = 'group';
-      const group = await Group.findByPk(groupId);
-      const groupSplit = group?.commissionSplit || 60;
-      const agentPortion = agentSharePercentage * (groupSplit / 100);
-      agentCommission = grossCommission * (agentPortion / 100);
-      groupCommission = grossCommission * ((100 - groupSplit) / 100);
-      officeCommission = grossCommission - agentCommission - groupCommission;
     } else {
       agentCommission = grossCommission * (agentSharePercentage / 100);
       officeCommission = grossCommission - agentCommission;
@@ -84,8 +71,6 @@ exports.calculateCommission = async (req, res) => {
       agent2Id: agent2Id || null,
       agent2SharePercentage: agent2SharePercentage || 0,
       agent2Commission: agent2Commission || 0,
-      groupId: groupId || null,
-      groupCommission: groupCommission || 0,
       companySharePercentage,
       officeCommission
     });
@@ -104,7 +89,6 @@ exports.createCommission = async (req, res) => {
       agentSharePercentage = 60,
       agent2Id,
       agent2SharePercentage = 0,
-      groupId,
       companySharePercentage = 40
     } = req.body;
 
@@ -112,7 +96,6 @@ exports.createCommission = async (req, res) => {
     let splitType = 'single';
     let agentCommission = 0;
     let agent2Commission = 0;
-    let groupCommission = 0;
     let officeCommission = 0;
 
     if (agent2Id && agent2SharePercentage > 0) {
@@ -120,14 +103,6 @@ exports.createCommission = async (req, res) => {
       agentCommission = grossCommission * (agentSharePercentage / 100);
       agent2Commission = grossCommission * (agent2SharePercentage / 100);
       officeCommission = grossCommission - agentCommission - agent2Commission;
-    } else if (groupId) {
-      splitType = 'group';
-      const group = await Group.findByPk(groupId);
-      const groupSplit = group?.commissionSplit || 60;
-      const agentPortion = agentSharePercentage * (groupSplit / 100);
-      agentCommission = grossCommission * (agentPortion / 100);
-      groupCommission = grossCommission * ((100 - groupSplit) / 100);
-      officeCommission = grossCommission - agentCommission - groupCommission;
     } else {
       agentCommission = grossCommission * (agentSharePercentage / 100);
       officeCommission = grossCommission - agentCommission;
@@ -137,7 +112,6 @@ exports.createCommission = async (req, res) => {
       dealId,
       agentId,
       propertyId: req.body.propertyId,
-      groupId,
       salePrice,
       commissionPercentage,
       grossCommission,
@@ -147,10 +121,6 @@ exports.createCommission = async (req, res) => {
       agent2Id: agent2Id || null,
       agent2SharePercentage: agent2SharePercentage || 0,
       agent2Commission: agent2Commission || 0,
-      teamSharePercentage: groupId ? 100 - (group?.commissionSplit || 60) : 0,
-      teamCommission: groupCommission || 0,
-      groupSharePercentage: groupId ? 100 - (group?.commissionSplit || 60) : 0,
-      groupCommission: groupCommission || 0,
       companySharePercentage,
       officeCommission,
       status: 'pending'
@@ -189,15 +159,14 @@ exports.getCommissionStats = async (req, res) => {
   try {
     const { Op } = require('sequelize');
     
-    const [totalPending, totalApproved, totalPaid, pendingCount, approvedCount, paidCount, officeTotal, groupTotal] = await Promise.all([
+    const [totalPending, totalApproved, totalPaid, pendingCount, approvedCount, paidCount, officeTotal] = await Promise.all([
       Commission.sum('agentCommission', { where: { status: 'pending' } }),
       Commission.sum('agentCommission', { where: { status: 'approved' } }),
       Commission.sum('agentCommission', { where: { status: { [Op.in]: ['paid', 'disbursed'] } } }),
       Commission.count({ where: { status: 'pending' } }),
       Commission.count({ where: { status: 'approved' } }),
       Commission.count({ where: { status: { [Op.in]: ['paid', 'disbursed'] } } }),
-      Commission.sum('officeCommission', { where: { status: { [Op.in]: ['paid', 'disbursed'] } } }),
-      Commission.sum('groupCommission', { where: { status: { [Op.in]: ['paid', 'disbursed'] } } })
+      Commission.sum('officeCommission', { where: { status: { [Op.in]: ['paid', 'disbursed'] } } })
     ]);
 
     const byAgent = await Commission.findAll({
@@ -228,7 +197,6 @@ exports.getCommissionStats = async (req, res) => {
       totalApproved: totalApproved || 0,
       totalPaid: totalPaid || 0,
       officeTotal: officeTotal || 0,
-      groupTotal: groupTotal || 0,
       pendingCount: pendingCount || 0,
       approvedCount: approvedCount || 0,
       paidCount: paidCount || 0,

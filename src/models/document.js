@@ -51,11 +51,6 @@ const Document = sequelize.define('Document', {
     type: DataTypes.UUID,
     allowNull: true,
     comment: 'User associated with this document'
-  },
-  groupId: {
-    type: DataTypes.UUID,
-    allowNull: true,
-    comment: 'Group associated with this document'
   }
 }, {
   timestamps: true
