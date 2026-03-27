@@ -210,7 +210,7 @@ exports.getPublicSigningData = async (req, res) => {
     const { documentId, token } = req.params;
 
     const document = await Document.findByPk(documentId);
-    if (!document) return res.status(404).json({ message: 'Document not found' });
+    if (!document) return res.status(404).json({ message: 'Document not foud  nd' });
 
     if (!document.isDigitalSignatureEnabled) {
       return res.status(400).json({ message: 'Digital signature not enabled for this document' });
