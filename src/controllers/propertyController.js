@@ -12,6 +12,10 @@ exports.getAllProperties = async (req, res) => {
     const minPrice = req.query.minPrice ? parseFloat(req.query.minPrice) : null;
     const maxPrice = req.query.maxPrice ? parseFloat(req.query.maxPrice) : null;
     const minBedrooms = req.query.minBedrooms ? parseInt(req.query.minBedrooms) : null;
+    const maxBedrooms = req.query.maxBedrooms ? parseInt(req.query.maxBedrooms) : null;
+    const minBathrooms = req.query.minBathrooms ? parseInt(req.query.minBathrooms) : null;
+    const minArea = req.query.minArea ? parseFloat(req.query.minArea) : null;
+    const maxArea = req.query.maxArea ? parseFloat(req.query.maxArea) : null;
     const city = req.query.city;
 
     const where = {};
@@ -42,7 +46,23 @@ exports.getAllProperties = async (req, res) => {
     }
     
     if (minBedrooms) {
-      where.bedrooms = { [Op.gte]: minBedrooms };
+      where.bedrooms = { ...where.bedrooms, [Op.gte]: minBedrooms };
+    }
+    
+    if (maxBedrooms) {
+      where.bedrooms = { ...where.bedrooms, [Op.lte]: maxBedrooms };
+    }
+    
+    if (minBathrooms) {
+      where.bathrooms = { [Op.gte]: minBathrooms };
+    }
+    
+    if (minArea) {
+      where.area = { [Op.gte]: minArea };
+    }
+    
+    if (maxArea) {
+      where.area = { ...where.area, [Op.lte]: maxArea };
     }
     
     if (city) {
