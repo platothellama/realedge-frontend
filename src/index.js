@@ -105,6 +105,11 @@ const startServer = async () => {
   
   // Sync Models
   try {
+    try {
+      await sequelize.query('DROP TABLE IF EXISTS `Leads`');
+      console.log('🗑️ Dropped Leads table to reset indexes');
+    } catch (e) {}
+
     await sequelize.sync({ alter: true });
     console.log('📦 Database models synced.');
   } catch (err) {
