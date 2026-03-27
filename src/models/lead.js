@@ -67,9 +67,33 @@ const Lead = sequelize.define('Lead', {
       model: 'Users',
       key: 'id'
     }
+  },
+  groupId: {
+    type: DataTypes.UUID,
+    allowNull: true,
+    references: {
+      model: 'Groups',
+      key: 'id'
+    }
+  },
+  agentId: {
+    type: DataTypes.UUID,
+    allowNull: true,
+    references: {
+      model: 'Users',
+      key: 'id'
+    }
   }
 }, {
-  timestamps: true
+  timestamps: true,
+  indexes: [
+    { fields: ['email'] },
+    { fields: ['phone'] },
+    { fields: ['status'] },
+    { fields: ['assignedToUserId'] },
+    { fields: ['groupId'] },
+    { fields: ['agentId'] }
+  ]
 });
 
 module.exports = Lead;
