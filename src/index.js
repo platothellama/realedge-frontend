@@ -70,7 +70,7 @@ app.use('/api/track', trackRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/features', featureFlagRoutes);
 app.use('/api/payments', paymentRoutes);
-app.use('/api/documents/public', publicDocumentRoutes);
+app.use('/api/sign', publicDocumentRoutes);
 
 // Direct Upload Route (Fallback)
 app.post('/api/properties/upload', protect, upload.single('image'), (req, res) => {
