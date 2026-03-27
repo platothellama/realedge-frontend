@@ -267,7 +267,7 @@ exports.generateSigningLink = async (req, res) => {
 
     // Create signature record for multi-signer support
     const existingSignatures = await DocumentSignature.findAll({ where: { documentId: id } });
-    const signerOrder = signingOrder || existingSignatures.length + 1;
+    const signerOrderNum = existingSignatures.length + 1;
 
     await DocumentSignature.create({
       documentId: id,
@@ -277,7 +277,7 @@ exports.generateSigningLink = async (req, res) => {
       tokenExpiresAt: expiresAt,
       status: 'sent',
       signerRole: signerRole,
-      signingOrder: signerOrder,
+      signingOrder: signerOrderNum,
       emailVerificationToken: emailVerificationToken,
       emailVerified: !requireEmailVerification
     });
