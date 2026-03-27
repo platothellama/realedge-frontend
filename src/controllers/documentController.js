@@ -1,4 +1,5 @@
 const { Document, DocumentVersion, User, DocumentSignature, AuditLog } = require('../models/associations');
+const notificationController = require('./notificationController');
 const path = require('path');
 const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
@@ -122,6 +123,15 @@ exports.uploadDocument = async (req, res) => {
       { fileName: req.file.originalname, fileSize: req.file.size, contentHash }
     );
 
+    // Create notification for document upload
+    await notificationController.createNotification(
+      userId,
+      'Document Uploaded',
+      `"${document.title}" has been uploaded successfully`,
+      'document',
+      `/documents/${document.id}`
+    );
+
     const result = await Document.findByPk(document.id, {
       include: [{ model: DocumentVersion, as: 'versions' }]
     });
@@ -155,6 +165,15 @@ exports.addVersion = async (req, res) => {
     });
 
     await document.update({ currentVersion: newVersionNumber });
+
+    // Create notification for new version
+    await notificationController.createNotification(
+      userId,
+      'New Document Version',
+      `Version ${newVersionNumber} of "${document.title}" has been uploaded`,
+      'document',
+      `/documents/${document.id}`
+    );
 
     const result = await Document.findByPk(document.id, {
       include: [{ model: DocumentVersion, as: 'versions', order: [['versionNumber', 'DESC']] }]
@@ -213,6 +232,15 @@ exports.signDocument = async (req, res) => {
       signedAt: new Date(),
       signedByUserId: req.user.id
     });
+
+    // Create notification for document signing
+    await notificationController.createNotification(
+      req.user.id,
+      'Document Signed',
+      `"${document.title}" has been signed successfully`,
+      'document',
+      `/documents/${document.id}`
+    );
 
     res.status(200).json(document);
   } catch (error) {
@@ -279,6 +307,15 @@ exports.generateSigningLink = async (req, res) => {
       req.headers['user-agent'],
       `Signing link generated for ${signerEmail || 'anonymous'}`,
       { signerEmail, signerType, signerRole, requireEmailVerification }
+    );
+
+    // Create notification for signing link generated
+    await notificationController.createNotification(
+      req.user?.id,
+      'Signing Link Generated',
+      `Signing link for "${document.title}" has been generated${signerEmail ? ` for ${signerEmail}` : ''}`,
+      'document',
+      `/documents/${document.id}`
     );
 
     res.status(200).json({
@@ -420,6 +457,26 @@ exports.signDocumentByToken = async (req, res) => {
       { signatureHash, tamperCheckPassed }
     );
 
+    // Create notification for document signing
+    await notificationController.createNotification(
+      req.user.id,
+      'Document Signed',
+      `"${document.title}" has been signed successfully`,
+      'document',
+      `/documents/${document.id}`
+    );
+
+    // Notify the uploader if different from signer
+    if (document.uploadedByUserId && document.uploadedByUserId !== req.user.id) {
+      await notificationController.createNotification(
+        document.uploadedByUserId,
+        'Document Signed',
+        `"${document.title}" has been signed by ${req.user.name || req.user.email}`,
+        'document',
+        `/documents/${document.id}`
+      );
+    }
+
     res.status(200).json({ 
       message: 'Document signed successfully', 
       document,
@@ -436,8 +493,21 @@ exports.deleteDocument = async (req, res) => {
     const document = await Document.findByPk(req.params.id);
     if (!document) return res.status(404).json({ message: 'Document not found' });
 
+    const docTitle = document.title;
+    const userId = req.user.id;
+
     // In a real app, we'd also delete files from disk
     await document.destroy();
+
+    // Create notification for document deletion
+    await notificationController.createNotification(
+      userId,
+      'Document Deleted',
+      `"${docTitle}" has been deleted`,
+      'document',
+      null
+    );
+
     res.status(200).json({ message: 'Document deleted successfully' });
   } catch (error) {
     res.status(500).json({ message: 'Error deleting document', error: error.message });
@@ -667,6 +737,17 @@ exports.processPublicSignature = async (req, res) => {
         legalJurisdiction: document.legalJurisdiction
       }
     );
+
+    // Notify the uploader that document was signed
+    if (document.uploadedByUserId) {
+      await notificationController.createNotification(
+        document.uploadedByUserId,
+        'Document Signed',
+        `"${document.title}" has been signed by ${signerName || signerEmail || 'a signer'}`,
+        'document',
+        `/documents/${document.id}`
+      );
+    }
 
     res.status(200).json({
       message: 'Document signed successfully',

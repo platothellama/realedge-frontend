@@ -24,7 +24,7 @@ const Notification = sequelize.define('Notification', {
     allowNull: false
   },
   type: {
-    type: DataTypes.ENUM('lead', 'deal', 'visit', 'document', 'system', 'reminder'),
+    type: DataTypes.ENUM('lead', 'deal', 'visit', 'document', 'system', 'reminder', 'login'),
     defaultValue: 'system'
   },
   link: {

@@ -1,5 +1,6 @@
 const User = require('../models/user');
 const LoginLog = require('../models/loginLog');
+const notificationController = require('./notificationController');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 
@@ -23,6 +24,15 @@ const createSendToken = async (user, statusCode, req, res) => {
   // Update last login
   user.lastLogin = new Date();
   await user.save({ validate: false });
+
+  // Create notification for login
+  await notificationController.createNotification(
+    user.id,
+    'Welcome Back',
+    `You logged in at ${new Date().toLocaleTimeString()}`,
+    'login',
+    null
+  );
 
   res.status(statusCode).json({
     status: 'success',

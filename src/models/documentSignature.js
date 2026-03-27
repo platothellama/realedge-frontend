@@ -43,6 +43,11 @@ const DocumentSignature = sequelize.define('DocumentSignature', {
     type: DataTypes.STRING,
     allowNull: true
   },
+  signedByUserId: {
+    type: DataTypes.UUID,
+    allowNull: true,
+    comment: 'User who signed the document'
+  },
   signedUserAgent: {
     type: DataTypes.STRING,
     allowNull: true
