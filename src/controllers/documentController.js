@@ -522,12 +522,12 @@ exports.processPublicSignature = async (req, res) => {
       return res.status(400).json({ message: 'You must acknowledge the legal disclosures' });
     }
 
+    const document = await Document.findByPk(documentId);
+
     // Check GDPR consent for EU jurisdiction
     if (document.legalJurisdiction === 'EU' && !gdprConsent) {
       return res.status(400).json({ message: 'GDPR consent is required for documents in EU jurisdiction' });
     }
-
-    const document = await Document.findByPk(documentId);
     if (!document) return res.status(404).json({ message: 'Document not found' });
 
     if (document.signatureStatus === 'signed') {
