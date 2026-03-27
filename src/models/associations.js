@@ -10,6 +10,7 @@ const Deal = require('./deal');
 const Visit = require('./visit');
 const Document = require('./document');
 const DocumentVersion = require('./documentVersion');
+const DocumentSignature = require('./documentSignature');
 const Notification = require('./notification');
 const Transaction = require('./transaction');
 const Commission = require('./commission');
@@ -120,6 +121,13 @@ DocumentVersion.belongsTo(Document, { foreignKey: 'documentId' });
 // DocumentVersion - User Relation
 DocumentVersion.belongsTo(User, { foreignKey: 'uploadedByUserId', as: 'uploader' });
 
+// Document - DocumentSignature Relation
+Document.hasMany(DocumentSignature, { foreignKey: 'documentId', as: 'signatures' });
+DocumentSignature.belongsTo(Document, { foreignKey: 'documentId' });
+
+// DocumentSignature - User Relation
+DocumentSignature.belongsTo(User, { foreignKey: 'signedByUserId', as: 'signer' });
+
 // Notification - User Relation
 Notification.belongsTo(User, { foreignKey: 'userId', as: 'user' });
 User.hasMany(Notification, { foreignKey: 'userId', as: 'notifications' });
@@ -212,6 +220,7 @@ module.exports = {
   Visit,
   Document,
   DocumentVersion,
+  DocumentSignature,
   Notification,
   Transaction,
   Commission,
