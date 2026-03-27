@@ -17,15 +17,23 @@ const storage = multer.diskStorage({
   }
 });
 
-const fileFilter = (req, file, cb) => {
-  const allowedTypes = /jpeg|jpg|png|webp|gif|pdf|doc|docx|xls|xlsx/;
-  const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
+const imageTypes = /jpeg|jpg|png|webp|gif/;
+const documentTypes = /jpeg|jpg|png|webp|gif|pdf|doc|docx|xls|xlsx|ppt|pptx|txt|csv/;
 
-  if (extname) {
-    return cb(null, true);
-  } else {
-    cb(new Error('File type not allowed'));
+const fileFilter = (req, file, cb) => {
+  const ext = path.extname(file.originalname).toLowerCase().slice(1);
+  
+  if (file.fieldname === 'file') {
+    if (documentTypes.test(ext) || documentTypes.test(file.mimetype)) {
+      return cb(null, true);
+    }
+  } else if (file.fieldname === 'image') {
+    if (imageTypes.test(ext) && imageTypes.test(file.mimetype)) {
+      return cb(null, true);
+    }
   }
+  
+  cb(new Error(`File type not allowed: ${ext}. Images: jpeg, jpg, png, webp, gif. Documents: pdf, doc, docx, xls, xlsx, ppt, pptx, txt, csv`));
 };
 
 const upload = multer({

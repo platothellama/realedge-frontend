@@ -10,8 +10,6 @@ const Deal = require('./deal');
 const Visit = require('./visit');
 const Document = require('./document');
 const DocumentVersion = require('./documentVersion');
-const DocumentSignature = require('./documentSignature');
-const Seller = require('./seller');
 const Notification = require('./notification');
 const Transaction = require('./transaction');
 const Commission = require('./commission');
@@ -114,27 +112,12 @@ Document.belongsTo(User, { foreignKey: 'uploadedByUserId', as: 'uploader' });
 Document.belongsTo(Deal, { foreignKey: 'dealId', as: 'deal' });
 Deal.hasMany(Document, { foreignKey: 'dealId', as: 'documents' });
 
-// Document - Seller Relation
-Document.belongsTo(Seller, { foreignKey: 'sellerId', as: 'seller' });
-Seller.hasMany(Document, { foreignKey: 'sellerId', as: 'documents' });
-
-// Document - Team Relation
-Document.belongsTo(Team, { foreignKey: 'teamUserId', as: 'team' });
-
-// Seller - Property Relation
-Seller.hasMany(Property, { foreignKey: 'sellerId', as: 'properties' });
-Property.belongsTo(Seller, { foreignKey: 'sellerId', as: 'seller' });
-
 // DocumentVersion - Document Relation
 Document.hasMany(DocumentVersion, { foreignKey: 'documentId', as: 'versions' });
 DocumentVersion.belongsTo(Document, { foreignKey: 'documentId' });
 
 // DocumentVersion - User Relation
 DocumentVersion.belongsTo(User, { foreignKey: 'uploadedByUserId', as: 'uploader' });
-
-// Document - DocumentSignature Relation
-Document.hasMany(DocumentSignature, { foreignKey: 'documentId', as: 'signatures' });
-DocumentSignature.belongsTo(Document, { foreignKey: 'documentId' });
 
 // Notification - User Relation
 Notification.belongsTo(User, { foreignKey: 'userId', as: 'user' });
@@ -154,9 +137,6 @@ Commission.belongsTo(User, { foreignKey: 'agent2Id', as: 'agent2' });
 // Commission - Team Relation
 Commission.belongsTo(Team, { foreignKey: 'teamId', as: 'team' });
 Team.hasMany(Commission, { foreignKey: 'teamId', as: 'commissions' });
-
-// Team - User Relation (leader)
-Team.belongsTo(User, { foreignKey: 'leaderId', as: 'leader' });
 
 // Commission - Deal Relation
 Commission.belongsTo(Deal, { foreignKey: 'dealId', as: 'deal' });
@@ -258,7 +238,5 @@ module.exports = {
   WebsiteProperty,
   LayoutTemplate,
   Payment,
-  PaymentPlan,
-  DocumentSignature,
-  Seller
+  PaymentPlan
 };
