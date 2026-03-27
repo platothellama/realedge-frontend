@@ -57,8 +57,8 @@ User.hasMany(LoginLog, { foreignKey: 'userId', as: 'logs' });
 LoginLog.belongsTo(User, { foreignKey: 'userId' });
 
 // User - Group Relation (Many-to-Many)
-User.belongsToMany(Group, { through: 'UserGroups', as: 'groups' });
-Group.belongsToMany(User, { through: 'UserGroups', as: 'members' });
+User.belongsToMany(Group, { through: 'UserGroups', as: 'groups', foreignKey: 'userId', otherKey: 'groupId' });
+Group.belongsToMany(User, { through: 'UserGroups', as: 'members', foreignKey: 'groupId', otherKey: 'userId' });
 
 // Property - Assignment Relation
 Property.belongsTo(User, { foreignKey: 'assignedToUserId', as: 'assignedUser' });
