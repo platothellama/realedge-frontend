@@ -110,7 +110,10 @@ exports.addGroupMember = async (req, res) => {
     const user = await User.findByPk(userId);
     if (!user) return res.status(404).json({ status: 'fail', message: 'User not found' });
 
-    await user.update({ groupId });
+    const group = await Group.findByPk(groupId);
+    if (!group) return res.status(404).json({ status: 'fail', message: 'Group not found' });
+
+    await group.addMember(user);
     res.status(200).json({ status: 'success', message: 'Member added to group' });
   } catch (error) {
     res.status(400).json({ status: 'fail', message: 'Error adding group member', error: error.message });

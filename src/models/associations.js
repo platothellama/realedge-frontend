@@ -115,7 +115,6 @@ Group.hasMany(Document, { foreignKey: 'groupId', as: 'documents' });
 
 // Group - User Relations
 Group.belongsTo(User, { foreignKey: 'leaderId', as: 'leader' });
-User.belongsTo(Group, { foreignKey: 'groupId', as: 'group' });
 
 // Group - Group Relation (Self-referential for parentGroup)
 Group.belongsTo(Group, { foreignKey: 'parentGroupId', as: 'parentGroup' });
