@@ -109,13 +109,6 @@ Document.belongsTo(User, { foreignKey: 'uploadedByUserId', as: 'uploader' });
 Document.belongsTo(User, { foreignKey: 'userId', as: 'user' });
 User.hasMany(Document, { foreignKey: 'userId', as: 'userDocuments' });
 
-// Group - User Relations
-Group.belongsTo(User, { foreignKey: 'leaderId', as: 'leader' });
-
-// Group - Group Relation (Self-referential for parentGroup)
-Group.belongsTo(Group, { foreignKey: 'parentGroupId', as: 'parentGroup' });
-Group.hasMany(Group, { foreignKey: 'parentGroupId', as: 'subGroups' });
-
 // Document - Deal Relation
 Document.belongsTo(Deal, { foreignKey: 'dealId', as: 'deal' });
 Deal.hasMany(Document, { foreignKey: 'dealId', as: 'documents' });
