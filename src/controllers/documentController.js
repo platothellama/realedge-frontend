@@ -322,7 +322,7 @@ exports.generateSigningLink = async (req, res) => {
       signingLink,
       expiresAt,
       documentId: document.id,
-      signerOrder,
+      signerOrder: signerOrderNum,
       requireEmailVerification: !!emailVerificationToken,
       emailVerificationToken
     });
