@@ -155,6 +155,9 @@ Commission.belongsTo(User, { foreignKey: 'agent2Id', as: 'agent2' });
 Commission.belongsTo(Team, { foreignKey: 'teamId', as: 'team' });
 Team.hasMany(Commission, { foreignKey: 'teamId', as: 'commissions' });
 
+// Team - User Relation (leader)
+Team.belongsTo(User, { foreignKey: 'leaderId', as: 'leader' });
+
 // Commission - Deal Relation
 Commission.belongsTo(Deal, { foreignKey: 'dealId', as: 'deal' });
 Deal.hasMany(Commission, { foreignKey: 'dealId', as: 'commissions' });
