@@ -114,6 +114,15 @@ User.hasMany(Document, { foreignKey: 'userId', as: 'userDocuments' });
 Document.belongsTo(Team, { foreignKey: 'teamId', as: 'team' });
 Team.hasMany(Document, { foreignKey: 'teamId', as: 'documents' });
 
+// Team - User Relations
+Team.belongsTo(User, { foreignKey: 'leaderId', as: 'leader' });
+User.belongsTo(Team, { foreignKey: 'teamId', as: 'team' });
+Team.hasMany(User, { foreignKey: 'teamId', as: 'members' });
+
+// Team - Team Relation (Self-referential for parentTeam)
+Team.belongsTo(Team, { foreignKey: 'parentTeamId', as: 'parentTeam' });
+Team.hasMany(Team, { foreignKey: 'parentTeamId', as: 'subTeams' });
+
 // Document - Deal Relation
 Document.belongsTo(Deal, { foreignKey: 'dealId', as: 'deal' });
 Deal.hasMany(Document, { foreignKey: 'dealId', as: 'documents' });

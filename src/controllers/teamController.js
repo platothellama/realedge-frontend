@@ -11,7 +11,8 @@ exports.getTeams = async (req, res) => {
       where,
       include: [
         { model: User, as: 'leader', attributes: ['id', 'name', 'photo'] },
-        { model: Team, as: 'parentTeam', attributes: ['id', 'name'] }
+        { model: Team, as: 'parentTeam', attributes: ['id', 'name'] },
+        { model: User, as: 'members', attributes: ['id', 'name', 'photo'] }
       ],
       order: [['name', 'ASC']]
     });
