@@ -107,6 +107,12 @@ Property.hasMany(Document, { foreignKey: 'propertyId', as: 'propertyDocuments' }
 
 // Document - User Relation
 Document.belongsTo(User, { foreignKey: 'uploadedByUserId', as: 'uploader' });
+Document.belongsTo(User, { foreignKey: 'userId', as: 'user' });
+User.hasMany(Document, { foreignKey: 'userId', as: 'userDocuments' });
+
+// Document - Team Relation
+Document.belongsTo(Team, { foreignKey: 'teamId', as: 'team' });
+Team.hasMany(Document, { foreignKey: 'teamId', as: 'documents' });
 
 // Document - Deal Relation
 Document.belongsTo(Deal, { foreignKey: 'dealId', as: 'deal' });

@@ -46,6 +46,16 @@ const Document = sequelize.define('Document', {
   signedByUserId: {
     type: DataTypes.UUID,
     allowNull: true
+  },
+  userId: {
+    type: DataTypes.UUID,
+    allowNull: true,
+    comment: 'User associated with this document'
+  },
+  teamId: {
+    type: DataTypes.UUID,
+    allowNull: true,
+    comment: 'Team associated with this document'
   }
 }, {
   timestamps: true
