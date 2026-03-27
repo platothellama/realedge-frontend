@@ -2,8 +2,19 @@ const { Group, User } = require('../models/associations');
 
 exports.getAllGroups = async (req, res) => {
   try {
+    const { status, officeId } = req.query;
+    let where = {};
+    if (status) where.status = status;
+    if (officeId) where.officeId = officeId;
+
     const groups = await Group.findAll({
-      include: [{ model: User, as: 'members', attributes: ['id', 'name', 'email'] }]
+      where,
+      include: [
+        { model: User, as: 'leader', attributes: ['id', 'name', 'photo'] },
+        { model: Group, as: 'parentGroup', attributes: ['id', 'name'] },
+        { model: User, as: 'members', attributes: ['id', 'name', 'photo'] }
+      ],
+      order: [['name', 'ASC']]
     });
     res.status(200).json({ status: 'success', data: groups });
   } catch (error) {
@@ -13,15 +24,29 @@ exports.getAllGroups = async (req, res) => {
 
 exports.createGroup = async (req, res) => {
   try {
-    const { name, description, userIds } = req.body;
-    const group = await Group.create({ name, description });
+    const { name, description, userIds, leaderId, parentGroupId, officeId, color, commissionSplit, targetRevenue, status } = req.body;
+    const group = await Group.create({ 
+      name, 
+      description, 
+      leaderId, 
+      parentGroupId, 
+      officeId, 
+      color, 
+      commissionSplit, 
+      targetRevenue, 
+      status 
+    });
     
     if (userIds && userIds.length > 0) {
       await group.addMembers(userIds);
     }
     
     const result = await Group.findByPk(group.id, {
-      include: [{ model: User, as: 'members', attributes: ['id', 'name', 'email'] }]
+      include: [
+        { model: User, as: 'leader', attributes: ['id', 'name', 'photo'] },
+        { model: Group, as: 'parentGroup', attributes: ['id', 'name'] },
+        { model: User, as: 'members', attributes: ['id', 'name', 'photo'] }
+      ]
     });
     
     res.status(201).json({ status: 'success', data: result });
@@ -32,18 +57,32 @@ exports.createGroup = async (req, res) => {
 
 exports.updateGroup = async (req, res) => {
   try {
-    const { name, description, userIds } = req.body;
+    const { name, description, userIds, leaderId, parentGroupId, officeId, color, commissionSplit, targetRevenue, status } = req.body;
     const group = await Group.findByPk(req.params.id);
     if (!group) return res.status(404).json({ status: 'fail', message: 'Group not found' });
 
-    await group.update({ name, description });
+    await group.update({ 
+      name, 
+      description, 
+      leaderId, 
+      parentGroupId, 
+      officeId, 
+      color, 
+      commissionSplit, 
+      targetRevenue, 
+      status 
+    });
     
     if (userIds) {
       await group.setMembers(userIds);
     }
 
     const result = await Group.findByPk(group.id, {
-      include: [{ model: User, as: 'members', attributes: ['id', 'name', 'email'] }]
+      include: [
+        { model: User, as: 'leader', attributes: ['id', 'name', 'photo'] },
+        { model: Group, as: 'parentGroup', attributes: ['id', 'name'] },
+        { model: User, as: 'members', attributes: ['id', 'name', 'photo'] }
+      ]
     });
 
     res.status(200).json({ status: 'success', data: result });
@@ -61,5 +100,43 @@ exports.deleteGroup = async (req, res) => {
     res.status(200).json({ status: 'success', message: 'Group deleted successfully' });
   } catch (error) {
     res.status(500).json({ status: 'error', message: 'Error deleting group', error: error.message });
+  }
+};
+
+exports.addGroupMember = async (req, res) => {
+  try {
+    const { userId, groupId } = req.body;
+    
+    const user = await User.findByPk(userId);
+    if (!user) return res.status(404).json({ status: 'fail', message: 'User not found' });
+
+    await user.update({ groupId });
+    res.status(200).json({ status: 'success', message: 'Member added to group' });
+  } catch (error) {
+    res.status(400).json({ status: 'fail', message: 'Error adding group member', error: error.message });
+  }
+};
+
+exports.getGroupStats = async (req, res) => {
+  try {
+    const groups = await Group.findAll({
+      include: [{ model: User, as: 'members', attributes: ['id'] }]
+    });
+
+    const groupStats = groups.map(group => ({
+      id: group.id,
+      name: group.name,
+      memberCount: group.members ? group.members.length : 0,
+      commissionSplit: group.commissionSplit,
+      targetRevenue: group.targetRevenue
+    }));
+
+    res.status(200).json({ 
+      status: 'success',
+      totalGroups: groups.length,
+      groups: groupStats
+    });
+  } catch (error) {
+    res.status(500).json({ status: 'error', message: 'Error fetching group stats', error: error.message });
   }
 };

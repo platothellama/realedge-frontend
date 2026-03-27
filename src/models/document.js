@@ -52,10 +52,10 @@ const Document = sequelize.define('Document', {
     allowNull: true,
     comment: 'User associated with this document'
   },
-  teamId: {
+  groupId: {
     type: DataTypes.UUID,
     allowNull: true,
-    comment: 'Team associated with this document'
+    comment: 'Group associated with this document'
   }
 }, {
   timestamps: true

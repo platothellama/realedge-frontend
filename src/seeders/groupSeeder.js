@@ -9,7 +9,7 @@ const seedGroups = async () => {
 
     const groups = [
       {
-        name: 'Luxury Sales Team',
+        name: 'Luxury Sales Group',
         description: 'Specialized in high-end penthouses and coastal villas.'
       },
       {
@@ -31,7 +31,7 @@ const seedGroups = async () => {
       const group = await Group.create(g);
       
       // Assign some users to groups
-      if (g.name === 'Luxury Sales Team') {
+      if (g.name === 'Luxury Sales Group') {
         if (broker) await group.addMember(broker);
         if (agent) await group.addMember(agent);
       } else if (g.name === 'Commercial Division') {

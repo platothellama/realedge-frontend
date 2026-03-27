@@ -19,7 +19,7 @@ const Commission = sequelize.define('Commission', {
     type: DataTypes.UUID,
     allowNull: true
   },
-  teamId: {
+  groupId: {
     type: DataTypes.UUID,
     allowNull: true
   },
@@ -36,7 +36,7 @@ const Commission = sequelize.define('Commission', {
     allowNull: false
   },
   splitType: {
-    type: DataTypes.ENUM('single', 'team', 'multi_agent'),
+    type: DataTypes.ENUM('single', 'group', 'multi_agent'),
     defaultValue: 'single'
   },
   agentSharePercentage: {
@@ -64,6 +64,14 @@ const Commission = sequelize.define('Commission', {
     defaultValue: 0
   },
   teamCommission: {
+    type: DataTypes.DECIMAL(15, 2),
+    allowNull: true
+  },
+  groupSharePercentage: {
+    type: DataTypes.FLOAT,
+    defaultValue: 0
+  },
+  groupCommission: {
     type: DataTypes.DECIMAL(15, 2),
     allowNull: true
   },

@@ -67,6 +67,10 @@ const User = sequelize.define('User', {
   },
   lastLogin: {
     type: DataTypes.DATE
+  },
+  groupId: {
+    type: DataTypes.UUID,
+    allowNull: true
   }
 }, {
   timestamps: true,

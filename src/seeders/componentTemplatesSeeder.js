@@ -168,7 +168,7 @@ const componentTemplates = [
     },
     defaultContent: {
       title: 'Contact Us',
-      subtitle: 'Get in touch with our team',
+      subtitle: 'Get in touch with our group',
       submitButtonText: 'Send Message',
       successMessage: 'Thank you for your message!'
     },
@@ -213,9 +213,9 @@ const componentTemplates = [
   },
   // Agent Sections
   {
-    name: 'Agent Team',
-    category: 'Team',
-    componentType: 'agentTeam',
+    name: 'Agent Group',
+    category: 'Group',
+    componentType: 'agentGroup',
     variants: ['default', 'grid', 'carousel'],
     defaultConfig: {
       columns: 4,
@@ -224,7 +224,7 @@ const componentTemplates = [
       showContact: true
     },
     defaultContent: {
-      title: 'Our Team',
+      title: 'Our Group',
       subtitle: 'Meet our experienced real estate agents'
     },
     availableDataSources: ['agents'],
@@ -245,7 +245,7 @@ const componentTemplates = [
       testimonials: [
         { name: 'John Smith', text: 'Amazing service! Found our dream home within weeks.', rating: 5 },
         { name: 'Sarah Johnson', text: 'Professional and attentive. Highly recommended!', rating: 5 },
-        { name: 'Mike Wilson', text: 'Great experience working with this team.', rating: 5 }
+        { name: 'Mike Wilson', text: 'Great experience working with this group.', rating: 5 }
       ]
     },
     availableDataSources: [],

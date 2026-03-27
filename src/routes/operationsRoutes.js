@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const transactionWorkflowController = require('../controllers/transactionWorkflowController');
 const auditLogController = require('../controllers/auditLogController');
-const teamController = require('../controllers/teamController');
+const groupController = require('../controllers/groupController');
 const { protect } = require('../middleware/authMiddleware');
 
 router.use(protect);
@@ -18,12 +18,12 @@ router.get('/audit', auditLogController.getAuditLogs);
 router.post('/audit', auditLogController.createAuditLog);
 router.get('/audit/stats', auditLogController.getAuditStats);
 
-// Teams
-router.get('/teams', teamController.getTeams);
-router.post('/teams', teamController.createTeam);
-router.put('/teams/:id', teamController.updateTeam);
-router.delete('/teams/:id', teamController.deleteTeam);
-router.post('/teams/members', teamController.addTeamMember);
-router.get('/teams/stats', teamController.getTeamStats);
+// Groups
+router.get('/groups', groupController.getAllGroups);
+router.post('/groups', groupController.createGroup);
+router.put('/groups/:id', groupController.updateGroup);
+router.delete('/groups/:id', groupController.deleteGroup);
+router.post('/groups/members', groupController.addGroupMember);
+router.get('/groups/stats', groupController.getGroupStats);
 
 module.exports = router;

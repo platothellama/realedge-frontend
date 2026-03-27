@@ -22,7 +22,6 @@ const Campaign = require('./campaign');
 const CallLog = require('./callLog');
 const TransactionWorkflow = require('./transactionWorkflow');
 const AuditLog = require('./auditLog');
-const Team = require('./team');
 const EmailTracking = require('./emailTracking');
 const Payment = require('./payment');
 const PaymentPlan = require('./paymentPlan');
@@ -110,18 +109,18 @@ Document.belongsTo(User, { foreignKey: 'uploadedByUserId', as: 'uploader' });
 Document.belongsTo(User, { foreignKey: 'userId', as: 'user' });
 User.hasMany(Document, { foreignKey: 'userId', as: 'userDocuments' });
 
-// Document - Team Relation
-Document.belongsTo(Team, { foreignKey: 'teamId', as: 'team' });
-Team.hasMany(Document, { foreignKey: 'teamId', as: 'documents' });
+// Document - Group Relation
+Document.belongsTo(Group, { foreignKey: 'groupId', as: 'group' });
+Group.hasMany(Document, { foreignKey: 'groupId', as: 'documents' });
 
-// Team - User Relations
-Team.belongsTo(User, { foreignKey: 'leaderId', as: 'leader' });
-User.belongsTo(Team, { foreignKey: 'teamId', as: 'team' });
-Team.hasMany(User, { foreignKey: 'teamId', as: 'members' });
+// Group - User Relations
+Group.belongsTo(User, { foreignKey: 'leaderId', as: 'leader' });
+User.belongsTo(Group, { foreignKey: 'groupId', as: 'group' });
+Group.hasMany(User, { foreignKey: 'groupId', as: 'members' });
 
-// Team - Team Relation (Self-referential for parentTeam)
-Team.belongsTo(Team, { foreignKey: 'parentTeamId', as: 'parentTeam' });
-Team.hasMany(Team, { foreignKey: 'parentTeamId', as: 'subTeams' });
+// Group - Group Relation (Self-referential for parentGroup)
+Group.belongsTo(Group, { foreignKey: 'parentGroupId', as: 'parentGroup' });
+Group.hasMany(Group, { foreignKey: 'parentGroupId', as: 'subGroups' });
 
 // Document - Deal Relation
 Document.belongsTo(Deal, { foreignKey: 'dealId', as: 'deal' });
@@ -149,9 +148,9 @@ User.hasMany(Commission, { foreignKey: 'agentId', as: 'commissions' });
 // Commission - User Relation (Agent 2 - Co-listing)
 Commission.belongsTo(User, { foreignKey: 'agent2Id', as: 'agent2' });
 
-// Commission - Team Relation
-Commission.belongsTo(Team, { foreignKey: 'teamId', as: 'team' });
-Team.hasMany(Commission, { foreignKey: 'teamId', as: 'commissions' });
+// Commission - Group Relation
+Commission.belongsTo(Group, { foreignKey: 'groupId', as: 'group' });
+Group.hasMany(Commission, { foreignKey: 'groupId', as: 'commissions' });
 
 // Commission - Deal Relation
 Commission.belongsTo(Deal, { foreignKey: 'dealId', as: 'deal' });
@@ -242,7 +241,6 @@ module.exports = {
   CallLog,
   TransactionWorkflow,
   AuditLog,
-  Team,
   EmailTracking,
   WebsiteVisitor,
   WebsiteVisit,
