@@ -129,7 +129,7 @@ exports.uploadDocument = async (req, res) => {
       'Document Uploaded',
       `"${document.title}" has been uploaded successfully`,
       'document',
-      `/documents/${document.id}`
+      `/documents-manager/${document.id}`
     );
 
     const result = await Document.findByPk(document.id, {
@@ -172,7 +172,7 @@ exports.addVersion = async (req, res) => {
       'New Document Version',
       `Version ${newVersionNumber} of "${document.title}" has been uploaded`,
       'document',
-      `/documents/${document.id}`
+      `/documents-manager/${document.id}`
     );
 
     const result = await Document.findByPk(document.id, {
@@ -239,7 +239,7 @@ exports.signDocument = async (req, res) => {
       'Document Signed',
       `"${document.title}" has been signed successfully`,
       'document',
-      `/documents/${document.id}`
+      `/documents-manager/${document.id}`
     );
 
     res.status(200).json(document);
@@ -315,7 +315,7 @@ exports.generateSigningLink = async (req, res) => {
       'Signing Link Generated',
       `Signing link for "${document.title}" has been generated${signerEmail ? ` for ${signerEmail}` : ''}`,
       'document',
-      `/documents/${document.id}`
+      `/documents-manager/${document.id}`
     );
 
     res.status(200).json({
@@ -463,7 +463,7 @@ exports.signDocumentByToken = async (req, res) => {
       'Document Signed',
       `"${document.title}" has been signed successfully`,
       'document',
-      `/documents/${document.id}`
+      `/documents-manager/${document.id}`
     );
 
     // Notify the uploader if different from signer
@@ -473,7 +473,7 @@ exports.signDocumentByToken = async (req, res) => {
         'Document Signed',
         `"${document.title}" has been signed by ${req.user.name || req.user.email}`,
         'document',
-        `/documents/${document.id}`
+        `/documents-manager/${document.id}`
       );
     }
 
@@ -745,7 +745,7 @@ exports.processPublicSignature = async (req, res) => {
         'Document Signed',
         `"${document.title}" has been signed by ${signerName || signerEmail || 'a signer'}`,
         'document',
-        `/documents/${document.id}`
+        `/documents-manager/${document.id}`
       );
     }
 

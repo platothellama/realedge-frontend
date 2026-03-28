@@ -12,8 +12,20 @@ const Document = sequelize.define('Document', {
     allowNull: false
   },
   type: {
-    type: DataTypes.ENUM('Contract', 'Property Paper', 'Client ID', 'Permit', 'Other'),
-    defaultValue: 'Other'
+    type: DataTypes.ENUM(
+      'Title Deed',
+      'Floor Plan',
+      'Property Photos',
+      'Ownership Proof',
+      'Reservation Form',
+      'Sales Agreement',
+      'Contract',
+      'Payment Receipt',
+      'ID / Passport',
+      'Proof of Funds',
+      'Custom'
+    ),
+    defaultValue: 'Custom'
   },
   status: {
     type: DataTypes.ENUM('Draft', 'Pending Signature', 'Signed', 'Expired', 'Archived'),

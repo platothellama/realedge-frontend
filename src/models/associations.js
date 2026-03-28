@@ -26,6 +26,7 @@ const AuditLog = require('./auditLog');
 const EmailTracking = require('./emailTracking');
 const Payment = require('./payment');
 const PaymentPlan = require('./paymentPlan');
+const Seller = require('./seller');
 const { WebsiteVisitor, WebsiteVisit } = require('./websiteVisitor');
 const { Website, WebsitePage, WebsiteSection, ComponentTemplate, WebsiteProperty, LayoutTemplate } = require('./website');
 
@@ -66,6 +67,10 @@ Property.belongsTo(User, { foreignKey: 'assignedToUserId', as: 'assignedUser' })
 Property.belongsTo(Group, { foreignKey: 'assignedToGroupId', as: 'assignedGroup' });
 User.hasMany(Property, { foreignKey: 'assignedToUserId', as: 'properties' });
 Group.hasMany(Property, { foreignKey: 'assignedToGroupId', as: 'properties' });
+
+// Property - Seller Relation
+Property.belongsTo(Seller, { foreignKey: 'sellerId', as: 'seller' });
+Seller.hasMany(Property, { foreignKey: 'sellerId', as: 'properties' });
 
 // Lead - Group Relation
 Lead.belongsTo(Group, { foreignKey: 'groupId', as: 'group' });
@@ -243,5 +248,6 @@ module.exports = {
   WebsiteProperty,
   LayoutTemplate,
   Payment,
-  PaymentPlan
+  PaymentPlan,
+  Seller
 };

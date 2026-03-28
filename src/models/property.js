@@ -99,6 +99,11 @@ const Property = sequelize.define('Property', {
     type: DataTypes.UUID,
     allowNull: true
   },
+  sellerId: {
+    type: DataTypes.UUID,
+    allowNull: true,
+    comment: 'Associated seller/owner of the property'
+  },
   commissionPercentage: {
     type: DataTypes.FLOAT,
     defaultValue: 0,
@@ -122,6 +127,26 @@ const Property = sequelize.define('Property', {
   },
   marketValue: {
     type: DataTypes.DECIMAL(15, 2),
+    allowNull: true
+  },
+  listingType: {
+    type: DataTypes.ENUM('Sale', 'Rent'),
+    defaultValue: 'Sale'
+  },
+  condition: {
+    type: DataTypes.ENUM('Used', 'New'),
+    defaultValue: 'Used'
+  },
+  floor: {
+    type: DataTypes.INTEGER,
+    allowNull: true
+  },
+  hasTerrace: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: false
+  },
+  terraceSize: {
+    type: DataTypes.FLOAT,
     allowNull: true
   }
 }, {

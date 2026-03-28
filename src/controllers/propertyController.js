@@ -1,4 +1,4 @@
-const { Property, PriceHistory, User, Group, Lead } = require('../models/associations');
+const { Property, PriceHistory, User, Group, Lead, Seller } = require('../models/associations');
 const { Op } = require('sequelize');
 
 exports.getAllProperties = async (req, res) => {
@@ -9,6 +9,7 @@ exports.getAllProperties = async (req, res) => {
     const search = req.query.search || '';
     const status = req.query.status;
     const type = req.query.type;
+    const listingType = req.query.listingType;
     const minPrice = req.query.minPrice ? parseFloat(req.query.minPrice) : null;
     const maxPrice = req.query.maxPrice ? parseFloat(req.query.maxPrice) : null;
     const minBedrooms = req.query.minBedrooms ? parseInt(req.query.minBedrooms) : null;
@@ -35,6 +36,10 @@ exports.getAllProperties = async (req, res) => {
     
     if (type && type !== 'All') {
       where.type = type;
+    }
+    
+    if (listingType && listingType !== 'All') {
+      where.listingType = listingType;
     }
     
     if (minPrice) {
@@ -78,7 +83,8 @@ exports.getAllProperties = async (req, res) => {
           include: [{ model: Lead, as: 'lead', attributes: ['id', 'name', 'email'] }]
         },
         { model: User, as: 'assignedUser', attributes: ['id', 'name', 'email'] },
-        { model: Group, as: 'assignedGroup', attributes: ['id', 'name'] }
+        { model: Group, as: 'assignedGroup', attributes: ['id', 'name'] },
+        { model: Seller, as: 'seller', attributes: ['id', 'name', 'email', 'phone'] }
       ],
       order: [['createdAt', 'DESC']],
       limit,
@@ -113,7 +119,8 @@ exports.getPropertyById = async (req, res) => {
           include: [{ model: Lead, as: 'lead', attributes: ['id', 'name', 'email'] }]
         },
         { model: User, as: 'assignedUser', attributes: ['id', 'name', 'email'] },
-        { model: Group, as: 'assignedGroup', attributes: ['id', 'name'] }
+        { model: Group, as: 'assignedGroup', attributes: ['id', 'name'] },
+        { model: Seller, as: 'seller', attributes: ['id', 'name', 'email', 'phone'] }
       ]
     });
     if (!property) return res.status(404).json({ message: 'Property not found' });
@@ -125,7 +132,25 @@ exports.getPropertyById = async (req, res) => {
 
 exports.createProperty = async (req, res) => {
   try {
-    const property = await Property.create(req.body);
+    const { newSeller, sellerId, ...propertyData } = req.body;
+
+    let finalSellerId = sellerId;
+
+    if (newSeller && newSeller.name) {
+      const existingSeller = await Seller.findOne({ where: { email: newSeller.email } });
+      if (existingSeller) {
+        finalSellerId = existingSeller.id;
+      } else {
+        const seller = await Seller.create(newSeller);
+        finalSellerId = seller.id;
+      }
+    }
+
+    if (finalSellerId) {
+      propertyData.sellerId = finalSellerId;
+    }
+
+    const property = await Property.create(propertyData);
     
     await PriceHistory.create({
       propertyId: property.id,
@@ -136,7 +161,8 @@ exports.createProperty = async (req, res) => {
     const result = await Property.findByPk(property.id, {
       include: [
         { model: User, as: 'assignedUser', attributes: ['id', 'name', 'email'] },
-        { model: Group, as: 'assignedGroup', attributes: ['id', 'name'] }
+        { model: Group, as: 'assignedGroup', attributes: ['id', 'name'] },
+        { model: Seller, as: 'seller', attributes: ['id', 'name', 'email', 'phone'] }
       ]
     });
 
@@ -151,10 +177,28 @@ exports.updateProperty = async (req, res) => {
     const property = await Property.findByPk(req.params.id);
     if (!property) return res.status(404).json({ message: 'Property not found' });
 
+    const { newSeller, sellerId, ...propertyData } = req.body;
+
+    let finalSellerId = sellerId;
+
+    if (newSeller && newSeller.name) {
+      const existingSeller = await Seller.findOne({ where: { email: newSeller.email } });
+      if (existingSeller) {
+        finalSellerId = existingSeller.id;
+      } else {
+        const seller = await Seller.create(newSeller);
+        finalSellerId = seller.id;
+      }
+    }
+
+    if (finalSellerId !== undefined) {
+      propertyData.sellerId = finalSellerId;
+    }
+
     const oldPrice = parseFloat(property.price);
     const newPrice = parseFloat(req.body.price);
 
-    await property.update(req.body);
+    await property.update(propertyData);
 
     if (newPrice && oldPrice !== newPrice) {
       await PriceHistory.create({
@@ -172,7 +216,8 @@ exports.updateProperty = async (req, res) => {
           include: [{ model: Lead, as: 'lead', attributes: ['id', 'name', 'email'] }]
         },
         { model: User, as: 'assignedUser', attributes: ['id', 'name', 'email'] },
-        { model: Group, as: 'assignedGroup', attributes: ['id', 'name'] }
+        { model: Group, as: 'assignedGroup', attributes: ['id', 'name'] },
+        { model: Seller, as: 'seller', attributes: ['id', 'name', 'email', 'phone'] }
       ]
     });
 
