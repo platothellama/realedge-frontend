@@ -193,16 +193,23 @@ exports.getDocuments = async (req, res) => {
     if (dealId) where.dealId = dealId;
     if (userId) where.userId = userId;
 
+    const { Property, User: UserModel } = require('../models/associations');
+
     const documents = await Document.findAll({
       where,
       include: [
         { 
           model: DocumentVersion, 
           as: 'versions',
-          include: [{ model: User, as: 'uploader', attributes: ['name'] }]
+          include: [{ model: UserModel, as: 'uploader', attributes: ['name'] }]
         },
-        { model: User, as: 'uploader', attributes: ['name'] },
-        { model: User, as: 'user', attributes: ['id', 'name', 'email'] }
+        { model: UserModel, as: 'uploader', attributes: ['name'] },
+        { model: UserModel, as: 'user', attributes: ['id', 'name', 'email'] },
+        { 
+          model: Property, 
+          as: 'property',
+          attributes: ['id', 'title', 'address', 'city', 'country', 'price', 'type', 'bedrooms', 'bathrooms', 'area', 'listingType', 'status']
+        }
       ],
       order: [['updatedAt', 'DESC']]
     });

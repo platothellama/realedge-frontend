@@ -1,4 +1,4 @@
-const { Deal, Property, User, Lead } = require('../models/associations');
+const { Deal, Property, User, Lead, Seller } = require('../models/associations');
 
 exports.getAllDeals = async (req, res) => {
   try {
@@ -16,7 +16,8 @@ exports.getAllDeals = async (req, res) => {
       include: [
         { model: Property, as: 'property', attributes: ['id', 'title', 'price', 'photos'] },
         { model: User, as: 'broker', attributes: ['id', 'name', 'photo'] },
-        { model: Lead, as: 'buyerLead', attributes: ['id', 'name', 'email'] }
+        { model: Lead, as: 'buyerLead', attributes: ['id', 'name', 'email'] },
+        { model: Seller, as: 'seller', attributes: ['id', 'name', 'email', 'phone'] }
       ],
       order: [['createdAt', 'DESC']]
     });
@@ -33,7 +34,8 @@ exports.getDealById = async (req, res) => {
       include: [
         { model: Property, as: 'property' },
         { model: User, as: 'broker', attributes: ['id', 'name', 'photo'] },
-        { model: Lead, as: 'buyerLead' }
+        { model: Lead, as: 'buyerLead' },
+        { model: Seller, as: 'seller', attributes: ['id', 'name', 'email', 'phone'] }
       ]
     });
 
@@ -54,7 +56,24 @@ exports.getDealById = async (req, res) => {
 
 exports.createDeal = async (req, res) => {
   try {
-    const dealData = { ...req.body };
+    const { newSeller, sellerId, ...dealData } = req.body;
+    
+    // Handle seller: either use existing sellerId or create new seller
+    let finalSellerId = sellerId;
+    
+    if (newSeller && newSeller.name) {
+      const existingSeller = await Seller.findOne({ where: { email: newSeller.email } });
+      if (existingSeller) {
+        finalSellerId = existingSeller.id;
+      } else {
+        const seller = await Seller.create(newSeller);
+        finalSellerId = seller.id;
+      }
+    }
+    
+    if (finalSellerId) {
+      dealData.sellerId = finalSellerId;
+    }
     
     // Auto-assign broker if not provided
     if (!dealData.brokerId) {
@@ -99,7 +118,24 @@ exports.updateDeal = async (req, res) => {
       return res.status(403).json({ message: 'Access denied' });
     }
 
-    const updateData = { ...req.body };
+    const { newSeller, sellerId, ...updateData } = req.body;
+
+    // Handle seller: either use existing sellerId or create new seller
+    let finalSellerId = sellerId;
+    
+    if (newSeller && newSeller.name) {
+      const existingSeller = await Seller.findOne({ where: { email: newSeller.email } });
+      if (existingSeller) {
+        finalSellerId = existingSeller.id;
+      } else {
+        const seller = await Seller.create(newSeller);
+        finalSellerId = seller.id;
+      }
+    }
+    
+    if (finalSellerId) {
+      updateData.sellerId = finalSellerId;
+    }
 
     // COMMISSION RESTRICTION: Only Admin/Super Admin can edit commission
     if (userRole !== 'Super Admin' && userRole !== 'Admin') {

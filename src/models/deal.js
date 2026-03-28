@@ -1,5 +1,6 @@
 const { DataTypes } = require('sequelize');
 const { sequelize } = require('../config/database');
+const Seller = require('./seller');
 
 const Deal = sequelize.define('Deal', {
   id: {
@@ -17,7 +18,7 @@ const Deal = sequelize.define('Deal', {
   },
   sellerName: {
     type: DataTypes.STRING,
-    allowNull: false
+    allowNull: true
   },
   commission: {
     type: DataTypes.DECIMAL(15, 2),
@@ -48,6 +49,11 @@ const Deal = sequelize.define('Deal', {
     type: DataTypes.UUID,
     allowNull: true
   },
+  sellerId: {
+    type: DataTypes.UUID,
+    allowNull: true,
+    comment: 'Associated seller/owner'
+  },
   closedAt: {
     type: DataTypes.DATE,
     allowNull: true
@@ -55,5 +61,8 @@ const Deal = sequelize.define('Deal', {
 }, {
   timestamps: true
 });
+
+Deal.belongsTo(Seller, { foreignKey: 'sellerId', as: 'seller' });
+Seller.hasMany(Deal, { foreignKey: 'sellerId', as: 'deals' });
 
 module.exports = Deal;
