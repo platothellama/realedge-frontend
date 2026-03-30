@@ -72,6 +72,5 @@ Seller.hasMany(Deal, { foreignKey: 'sellerId', as: 'deals' });
 
 const Group = require('./group');
 Deal.belongsTo(Group, { foreignKey: 'groupId', as: 'dealGroup' });
-Group.hasMany(Deal, { foreignKey: 'groupId', as: 'deals' });
 
 module.exports = Deal;
