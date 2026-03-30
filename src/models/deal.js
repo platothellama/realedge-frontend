@@ -57,6 +57,11 @@ const Deal = sequelize.define('Deal', {
   closedAt: {
     type: DataTypes.DATE,
     allowNull: true
+  },
+  groupId: {
+    type: DataTypes.UUID,
+    allowNull: true,
+    comment: 'Group (team) associated with this deal'
   }
 }, {
   timestamps: true
@@ -64,5 +69,9 @@ const Deal = sequelize.define('Deal', {
 
 Deal.belongsTo(Seller, { foreignKey: 'sellerId', as: 'seller' });
 Seller.hasMany(Deal, { foreignKey: 'sellerId', as: 'deals' });
+
+const Group = require('./group');
+Deal.belongsTo(Group, { foreignKey: 'groupId', as: 'dealGroup' });
+Group.hasMany(Deal, { foreignKey: 'groupId', as: 'deals' });
 
 module.exports = Deal;

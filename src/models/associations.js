@@ -27,6 +27,12 @@ const EmailTracking = require('./emailTracking');
 const Payment = require('./payment');
 const PaymentPlan = require('./paymentPlan');
 const Seller = require('./seller');
+const UserGroup = require('./userGroup');
+const Role = require('./role');
+const Permission = require('./permission');
+const RolePermission = require('./rolePermission');
+const DealCommission = require('./dealCommission');
+const SystemSetting = require('./systemSetting');
 const { WebsiteVisitor, WebsiteVisit } = require('./websiteVisitor');
 const { Website, WebsitePage, WebsiteSection, ComponentTemplate, WebsiteProperty, LayoutTemplate } = require('./website');
 
@@ -58,9 +64,9 @@ User.hasMany(Lead, { foreignKey: 'assignedToUserId', as: 'leads' });
 User.hasMany(LoginLog, { foreignKey: 'userId', as: 'logs' });
 LoginLog.belongsTo(User, { foreignKey: 'userId' });
 
-// User - Group Relation (Many-to-Many)
-User.belongsToMany(Group, { through: 'UserGroups', as: 'groups', foreignKey: 'userId', otherKey: 'groupId' });
-Group.belongsToMany(User, { through: 'UserGroups', as: 'members', foreignKey: 'groupId', otherKey: 'userId' });
+// User - Group Relation (Many-to-Many) - Updated to use UserGroup model
+User.belongsToMany(Group, { through: UserGroup, as: 'groups', foreignKey: 'userId', otherKey: 'groupId' });
+Group.belongsToMany(User, { through: UserGroup, as: 'members', foreignKey: 'groupId', otherKey: 'userId' });
 
 // Property - Assignment Relation
 Property.belongsTo(User, { foreignKey: 'assignedToUserId', as: 'assignedUser' });
@@ -216,6 +222,35 @@ PaymentPlan.belongsTo(Deal, { foreignKey: 'dealId', as: 'deal' });
 Deal.hasMany(PaymentPlan, { foreignKey: 'dealId', as: 'paymentPlans' });
 PaymentPlan.belongsTo(User, { foreignKey: 'createdByUserId', as: 'creator' });
 
+// ==========================================
+// NEW: UserGroup - User/Group Relations
+// ==========================================
+UserGroup.belongsTo(User, { foreignKey: 'userId', as: 'user' });
+UserGroup.belongsTo(Group, { foreignKey: 'groupId', as: 'group' });
+User.hasMany(UserGroup, { foreignKey: 'userId', as: 'userGroups' });
+Group.hasMany(UserGroup, { foreignKey: 'groupId', as: 'userGroups' });
+
+// ==========================================
+// NEW: Role & Permission System
+// ==========================================
+Role.belongsToMany(Permission, { through: RolePermission, as: 'permissions', foreignKey: 'roleId', otherKey: 'permissionId' });
+Permission.belongsToMany(Role, { through: RolePermission, as: 'roles', foreignKey: 'permissionId', otherKey: 'roleId' });
+
+// ==========================================
+// NEW: DealCommission Relations
+// ==========================================
+DealCommission.belongsTo(Deal, { foreignKey: 'dealId', as: 'deal' });
+DealCommission.belongsTo(User, { foreignKey: 'userId', as: 'user' });
+DealCommission.belongsTo(Group, { foreignKey: 'groupId', as: 'group' });
+Deal.hasMany(DealCommission, { foreignKey: 'dealId', as: 'dealCommissions' });
+User.hasMany(DealCommission, { foreignKey: 'userId', as: 'dealCommissions' });
+Group.hasMany(DealCommission, { foreignKey: 'groupId', as: 'dealCommissions' });
+
+// ==========================================
+// NEW: System Settings Relations
+// ==========================================
+// SystemSetting doesn't need associations - it's a key-value store
+
 module.exports = {
   Property,
   PropertyEmbedding,
@@ -253,5 +288,11 @@ module.exports = {
   LayoutTemplate,
   Payment,
   PaymentPlan,
-  Seller
+  Seller,
+  UserGroup,
+  Role,
+  Permission,
+  RolePermission,
+  DealCommission,
+  SystemSetting
 };

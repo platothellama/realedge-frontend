@@ -107,7 +107,25 @@ const Property = sequelize.define('Property', {
   commissionPercentage: {
     type: DataTypes.FLOAT,
     defaultValue: 0,
-    allowNull: false
+    allowNull: false,
+    comment: 'Legacy field - use commissionType and commissionValue instead'
+  },
+  commissionType: {
+    type: DataTypes.ENUM('percentage', 'fixed'),
+    defaultValue: 'percentage',
+    allowNull: true,
+    comment: 'Type of commission: percentage of price or fixed amount'
+  },
+  commissionValue: {
+    type: DataTypes.DECIMAL(15, 2),
+    allowNull: true,
+    comment: 'Commission value (percentage or fixed amount based on commissionType)'
+  },
+  commissionCurrency: {
+    type: DataTypes.STRING(3),
+    allowNull: true,
+    defaultValue: 'USD',
+    comment: 'Currency for fixed commission'
   },
   views: {
     type: DataTypes.INTEGER,

@@ -1,4 +1,5 @@
-const { Deal, Property, User, Lead, Seller } = require('../models/associations');
+const { Deal, Property, User, Lead, Seller, Group, DealCommission } = require('../models/associations');
+const commissionService = require('../services/commissionService');
 
 exports.getAllDeals = async (req, res) => {
   try {
@@ -149,6 +150,21 @@ exports.updateDeal = async (req, res) => {
       await deal.property.update({ status: 'Reserved' });
     }
 
+    // Auto-generate commission when deal is Closed
+    if (updateData.dealStage === 'Closed') {
+      if (deal.property && deal.property.status === 'Reserved') {
+        await deal.property.update({ status: 'Sold' });
+      }
+      
+      if (updateData.finalPrice) {
+        try {
+          await commissionService.calculateDealCommission(deal.id);
+        } catch (commissionError) {
+          console.warn('Failed to auto-generate commission:', commissionError.message);
+        }
+      }
+    }
+
     // Release property: when deal is lost (Closed with no payment) or deleted
     if (updateData.dealStage === 'Closed' && deal.property && deal.property.status === 'Reserved') {
       await deal.property.update({ status: 'Available' });
@@ -176,5 +192,98 @@ exports.deleteDeal = async (req, res) => {
     res.status(200).json({ message: 'Deal deleted successfully' });
   } catch (error) {
     res.status(500).json({ message: 'Error deleting deal', error: error.message });
+  }
+};
+
+exports.calculateDealCommission = async (req, res) => {
+  try {
+    const { id: dealId } = req.params;
+
+    const deal = await Deal.findByPk(dealId);
+    if (!deal) {
+      return res.status(404).json({ status: 'fail', message: 'Deal not found' });
+    }
+
+    const result = await commissionService.calculateDealCommission(dealId);
+
+    res.status(200).json({
+      status: 'success',
+      data: result
+    });
+  } catch (error) {
+    res.status(400).json({ 
+      status: 'error', 
+      message: 'Error calculating commission', 
+      error: error.message 
+    });
+  }
+};
+
+exports.getDealCommissions = async (req, res) => {
+  try {
+    const { id: dealId } = req.params;
+
+    const deal = await Deal.findByPk(dealId);
+    if (!deal) {
+      return res.status(404).json({ status: 'fail', message: 'Deal not found' });
+    }
+
+    const commissions = await commissionService.getDealCommissions(dealId);
+
+    res.status(200).json({
+      status: 'success',
+      data: commissions
+    });
+  } catch (error) {
+    res.status(500).json({ 
+      status: 'error', 
+      message: 'Error fetching commissions', 
+      error: error.message 
+    });
+  }
+};
+
+exports.autoGenerateCommission = async (req, res) => {
+  const transaction = await require('../config/database').sequelize.transaction();
+  
+  try {
+    const { id: dealId } = req.params;
+    const { finalPrice } = req.body;
+
+    const deal = await Deal.findByPk(dealId, {
+      include: [{ model: Property, as: 'property' }]
+    });
+
+    if (!deal) {
+      return res.status(404).json({ status: 'fail', message: 'Deal not found' });
+    }
+
+    if (deal.dealStage !== 'Closed') {
+      return res.status(400).json({ 
+        status: 'fail', 
+        message: 'Commission can only be generated for closed deals' 
+      });
+    }
+
+    if (finalPrice) {
+      await deal.update({ finalPrice }, { transaction });
+    }
+
+    const result = await commissionService.calculateDealCommission(dealId);
+
+    await transaction.commit();
+
+    res.status(200).json({
+      status: 'success',
+      message: 'Commission generated successfully',
+      data: result
+    });
+  } catch (error) {
+    await transaction.rollback();
+    res.status(400).json({ 
+      status: 'error', 
+      message: 'Error generating commission', 
+      error: error.message 
+    });
   }
 };

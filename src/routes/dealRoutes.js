@@ -11,4 +11,8 @@ router.post('/', dealController.createDeal);
 router.patch('/:id', dealController.updateDeal);
 router.delete('/:id', dealController.deleteDeal);
 
+router.post('/:id/calculate-commission', dealController.calculateDealCommission);
+router.post('/:id/generate-commission', dealController.autoGenerateCommission);
+router.get('/:id/commissions', dealController.getDealCommissions);
+
 module.exports = router;

@@ -31,6 +31,7 @@ const adminRoutes = require('./routes/adminRoutes');
 const featureFlagRoutes = require('./routes/featureFlagRoutes');
 const paymentRoutes = require('./routes/paymentRoutes');
 const publicDocumentRoutes = require('./routes/publicDocumentRoutes');
+const commissionSettingsRoutes = require('./routes/commissionSettingsRoutes');
 const upload = require('./middleware/uploadMiddleware');
 const { protect } = require('./middleware/authMiddleware');
 require('./models/associations');
@@ -73,6 +74,7 @@ app.use('/api/admin', adminRoutes);
 app.use('/api/features', featureFlagRoutes);
 app.use('/api/payments', paymentRoutes);
 app.use('/api/sign', publicDocumentRoutes);
+app.use('/api/commission-settings', commissionSettingsRoutes);
 
 // Direct Upload Route (Fallback)
 app.post('/api/properties/upload', protect, upload.single('image'), (req, res) => {
@@ -105,19 +107,10 @@ const startServer = async () => {
   // Connect to Database
   await connectDB();
   
-  // Sync Models
-  try {
-    try {
-      await sequelize.query('DROP TABLE IF EXISTS `Leads`');
-      console.log('🗑️ Dropped Leads table to reset indexes');
-    } catch (e) {}
-
-    await sequelize.sync({ alter: true });
-    console.log('📦 Database models synced.');
-  } catch (err) {
-    console.error('❌ Database sync error:', err.message);
-  }
-
+  // Skip sync - tables already exist, just load models
+  console.log('📦 Database connected (skipping sync to preserve existing data)');
+  
+  // Run seeders
   // Seed component templates
   try {
     const seedComponentTemplates = require('./seeders/componentTemplatesSeeder');
@@ -132,6 +125,22 @@ const startServer = async () => {
     await seedFeatureFlags();
   } catch (err) {
     console.log('⚠️  Feature flags seeding skipped');
+  }
+
+  // Seed permissions and roles
+  try {
+    const seedPermissions = require('./seeders/permissionSeeder');
+    await seedPermissions();
+  } catch (err) {
+    console.log('⚠️  Permissions seeding skipped');
+  }
+
+  // Seed system settings
+  try {
+    const seedSystemSettings = require('./seeders/systemSettingsSeeder');
+    await seedSystemSettings();
+  } catch (err) {
+    console.log('⚠️  System settings seeding skipped');
   }
 
   app.listen(PORT, () => {

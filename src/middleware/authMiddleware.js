@@ -1,5 +1,6 @@
 const jwt = require('jsonwebtoken');
 const User = require('../models/user');
+const { Role, Permission, RolePermission } = require('../models/associations');
 
 exports.protect = async (req, res, next) => {
   try {
@@ -67,4 +68,99 @@ exports.canManageFinance = (req, res, next) => {
     return res.status(403).json({ status: 'fail', message: 'Only Accountants and Admins can access financial records.' });
   }
   next();
+};
+
+/**
+ * Check if user has a specific permission
+ * @param {string} permissionKey - The permission key to check (e.g., 'create_property', 'view_finance')
+ */
+exports.checkPermission = (permissionKey) => {
+  return async (req, res, next) => {
+    try {
+      const userRole = req.user.role;
+      
+      const role = await Role.findOne({ where: { name: userRole } });
+      
+      if (!role) {
+        return res.status(403).json({
+          status: 'fail',
+          message: `Role not found: ${userRole}`
+        });
+      }
+      
+      const permission = await Permission.findOne({ where: { permKey: permissionKey } });
+      
+      if (!permission) {
+        return res.status(403).json({
+          status: 'fail',
+          message: `Permission not defined: ${permissionKey}`
+        });
+      }
+      
+      const rolePermission = await RolePermission.findOne({
+        where: { roleId: role.id, permissionId: permission.id }
+      });
+      
+      if (!rolePermission) {
+        return res.status(403).json({
+          status: 'fail',
+          message: `Access denied: Missing permission '${permissionKey}'`
+        });
+      }
+      
+      next();
+    } catch (error) {
+      res.status(500).json({
+        status: 'error',
+        message: 'Permission check failed',
+        error: error.message
+      });
+    }
+  };
+};
+
+/**
+ * Check if user belongs to a specific group with a specific role
+ * @param {string} groupId - The group ID to check
+ * @param {string|Array} roles - Required role(s) in the group
+ */
+exports.checkGroupRole = (groupId, roles) => {
+  return async (req, res, next) => {
+    try {
+      const { UserGroup, Group } = require('../models/associations');
+      
+      const userId = req.user.id;
+      const roleArray = Array.isArray(roles) ? roles : [roles];
+      
+      const userGroup = await UserGroup.findOne({
+        where: {
+          userId,
+          groupId
+        }
+      });
+      
+      if (!userGroup) {
+        return res.status(403).json({
+          status: 'fail',
+          message: 'You are not a member of this group'
+        });
+      }
+      
+      if (!roleArray.includes(userGroup.role)) {
+        return res.status(403).json({
+          status: 'fail',
+          message: `Required group role: ${roleArray.join(' or ')}, your role: ${userGroup.role}`
+        });
+      }
+      
+      req.userGroup = userGroup;
+      next();
+    } catch (error) {
+      res.status(500).json({
+        status: 'error',
+        message: 'Group role check failed',
+        error: error.message
+      });
+    }
+  };
 };
