@@ -3,14 +3,23 @@ const { Group, User, UserGroup } = require('../models/associations');
 exports.getAllGroups = async (req, res) => {
   try {
     const groups = await Group.findAll({
-      include: [{
-        model: User,
-        as: 'members',
-        through: { attributes: [] },
-        attributes: ['id', 'name', 'email']
-      }]
+      attributes: ['id', 'name', 'description', 'createdAt', 'updatedAt']
     });
-    res.status(200).json({ status: 'success', data: groups });
+
+    const groupsWithMembers = await Promise.all(groups.map(async (group) => {
+      const memberRecords = await UserGroup.findAll({
+        where: { groupId: group.id },
+        include: [{
+          model: User,
+          as: 'user',
+          attributes: ['id', 'name', 'email']
+        }]
+      });
+      const members = memberRecords.map(m => m.user);
+      return { ...group.toJSON(), members };
+    }));
+
+    res.status(200).json({ status: 'success', data: groupsWithMembers });
   } catch (error) {
     res.status(500).json({ status: 'error', message: 'Error fetching groups', error: error.message });
   }
@@ -22,14 +31,18 @@ exports.createGroup = async (req, res) => {
     const group = await Group.create({ name, description });
     
     if (userIds && userIds.length > 0) {
-      await group.addMembers(userIds);
+      for (const userId of userIds) {
+        await UserGroup.create({ userId, groupId: group.id, role: 'agent' });
+      }
     }
     
-    const result = await Group.findByPk(group.id, {
-      include: [{ model: User, as: 'members', attributes: ['id', 'name', 'email'] }]
+    const memberRecords = await UserGroup.findAll({
+      where: { groupId: group.id },
+      include: [{ model: User, as: 'user', attributes: ['id', 'name', 'email'] }]
     });
+    const members = memberRecords.map(m => m.user);
     
-    res.status(201).json({ status: 'success', data: result });
+    res.status(201).json({ status: 'success', data: { ...group.toJSON(), members } });
   } catch (error) {
     res.status(400).json({ status: 'fail', message: 'Error creating group', error: error.message });
   }
@@ -44,14 +57,19 @@ exports.updateGroup = async (req, res) => {
     await group.update({ name, description });
     
     if (userIds) {
-      await group.setMembers(userIds);
+      await UserGroup.destroy({ where: { groupId: group.id } });
+      for (const userId of userIds) {
+        await UserGroup.create({ userId, groupId: group.id, role: 'agent' });
+      }
     }
 
-    const result = await Group.findByPk(group.id, {
-      include: [{ model: User, as: 'members', attributes: ['id', 'name', 'email'] }]
+    const memberRecords = await UserGroup.findAll({
+      where: { groupId: group.id },
+      include: [{ model: User, as: 'user', attributes: ['id', 'name', 'email'] }]
     });
+    const members = memberRecords.map(m => m.user);
 
-    res.status(200).json({ status: 'success', data: result });
+    res.status(200).json({ status: 'success', data: { ...group.toJSON(), members } });
   } catch (error) {
     res.status(400).json({ status: 'fail', message: 'Error updating group', error: error.message });
   }
@@ -79,7 +97,12 @@ exports.addGroupMember = async (req, res) => {
     const group = await Group.findByPk(groupId);
     if (!group) return res.status(404).json({ status: 'fail', message: 'Group not found' });
 
-    await group.addMember(user);
+    const existing = await UserGroup.findOne({ where: { userId, groupId } });
+    if (existing) {
+      return res.status(400).json({ status: 'fail', message: 'User already in group' });
+    }
+
+    await UserGroup.create({ userId, groupId, role: 'agent' });
     res.status(200).json({ status: 'success', message: 'Member added to group' });
   } catch (error) {
     res.status(400).json({ status: 'fail', message: 'Error adding group member', error: error.message });
@@ -88,14 +111,15 @@ exports.addGroupMember = async (req, res) => {
 
 exports.getGroupStats = async (req, res) => {
   try {
-    const groups = await Group.findAll({
-      include: [{ model: User, as: 'members', attributes: ['id'] }]
-    });
+    const groups = await Group.findAll();
 
-    const groupStats = groups.map(group => ({
-      id: group.id,
-      name: group.name,
-      memberCount: group.members ? group.members.length : 0
+    const groupStats = await Promise.all(groups.map(async (group) => {
+      const count = await UserGroup.count({ where: { groupId: group.id } });
+      return {
+        id: group.id,
+        name: group.name,
+        memberCount: count
+      };
     }));
 
     res.status(200).json({ 
