@@ -35,6 +35,8 @@ const DealCommission = require('./dealCommission');
 const SystemSetting = require('./systemSetting');
 const { WebsiteVisitor, WebsiteVisit } = require('./websiteVisitor');
 const { Website, WebsitePage, WebsiteSection, ComponentTemplate, WebsiteProperty, LayoutTemplate } = require('./website');
+const ListingMethod = require('./listingMethod');
+const ListingMethodHistory = require('./listingMethodHistory');
 
 // Property - PropertyEmbedding Relation
 Property.hasOne(PropertyEmbedding, { foreignKey: 'propertyId', as: 'embedding' });
@@ -92,13 +94,19 @@ Property.hasMany(Deal, { foreignKey: 'propertyId', as: 'deals' });
 
 // Deal - Lead Relation
 Deal.belongsTo(Lead, { foreignKey: 'leadId', as: 'lead' });
-Deal.belongsTo(Lead, { foreignKey: 'leadId', as: 'buyerLead' });
 Lead.hasMany(Deal, { foreignKey: 'leadId', as: 'deals' });
+
+// Deal - Lead Relation (Buyer Lead)
+Deal.belongsTo(Lead, { foreignKey: 'buyerLeadId', as: 'buyerLead' });
+Lead.hasMany(Deal, { foreignKey: 'buyerLeadId', as: 'buyerDeals' });
 
 // Deal - User Relation (Agent)
 Deal.belongsTo(User, { foreignKey: 'agentId', as: 'agent' });
-Deal.belongsTo(User, { foreignKey: 'agentId', as: 'broker' });
 User.hasMany(Deal, { foreignKey: 'agentId', as: 'agentDeals' });
+
+// Deal - User Relation (Broker)
+Deal.belongsTo(User, { foreignKey: 'brokerId', as: 'broker' });
+User.hasMany(Deal, { foreignKey: 'brokerId', as: 'brokerDeals' });
 
 // Deal - Seller Relation
 Deal.belongsTo(Seller, { foreignKey: 'sellerId', as: 'dealSeller' });
@@ -151,6 +159,14 @@ User.hasMany(Notification, { foreignKey: 'userId', as: 'notifications' });
 Transaction.belongsTo(User, { foreignKey: 'userId', as: 'creator' });
 User.hasMany(Transaction, { foreignKey: 'userId', as: 'transactions' });
 
+// Transaction - Property Relation
+Transaction.belongsTo(Property, { foreignKey: 'propertyId', as: 'property' });
+Property.hasMany(Transaction, { foreignKey: 'propertyId', as: 'transactions' });
+
+// Transaction - Deal Relation
+Transaction.belongsTo(Deal, { foreignKey: 'dealId', as: 'deal' });
+Deal.hasMany(Transaction, { foreignKey: 'dealId', as: 'transactions' });
+
 // Commission - User Relation (Agent)
 Commission.belongsTo(User, { foreignKey: 'agentId', as: 'agent' });
 User.hasMany(Commission, { foreignKey: 'agentId', as: 'commissions' });
@@ -161,6 +177,10 @@ Commission.belongsTo(User, { foreignKey: 'agent2Id', as: 'agent2' });
 // Commission - Deal Relation
 Commission.belongsTo(Deal, { foreignKey: 'dealId', as: 'deal' });
 Deal.hasMany(Commission, { foreignKey: 'dealId', as: 'commissions' });
+
+// Commission - Property Relation
+Commission.belongsTo(Property, { foreignKey: 'propertyId', as: 'property' });
+Property.hasMany(Commission, { foreignKey: 'propertyId', as: 'commissions' });
 
 // Task - User Relation (assigned to)
 Task.belongsTo(User, { foreignKey: 'assignedToUserId', as: 'assignedTo' });
@@ -190,6 +210,8 @@ Deal.hasMany(Invoice, { foreignKey: 'dealId', as: 'invoices' });
 // Expense Relations
 Expense.belongsTo(User, { foreignKey: 'createdByUserId', as: 'creator' });
 User.hasMany(Expense, { foreignKey: 'createdByUserId', as: 'expenses' });
+Expense.belongsTo(Property, { foreignKey: 'propertyId', as: 'property' });
+Property.hasMany(Expense, { foreignKey: 'propertyId', as: 'expenses' });
 
 // Campaign Relations
 Campaign.belongsTo(User, { foreignKey: 'createdByUserId', as: 'creator' });
@@ -197,7 +219,11 @@ User.hasMany(Campaign, { foreignKey: 'createdByUserId', as: 'campaigns' });
 
 // CallLog Relations
 CallLog.belongsTo(Lead, { foreignKey: 'leadId', as: 'lead' });
+Lead.hasMany(CallLog, { foreignKey: 'leadId', as: 'callLogs' });
 CallLog.belongsTo(User, { foreignKey: 'agentId', as: 'agent' });
+User.hasMany(CallLog, { foreignKey: 'agentId', as: 'callLogs' });
+CallLog.belongsTo(Property, { foreignKey: 'propertyId', as: 'property' });
+Property.hasMany(CallLog, { foreignKey: 'propertyId', as: 'callLogs' });
 
 // Website Builder Relations
 Website.hasMany(WebsitePage, { foreignKey: 'websiteId', as: 'pages' });
@@ -221,6 +247,42 @@ Payment.belongsTo(User, { foreignKey: 'recordedByUserId', as: 'recorder' });
 PaymentPlan.belongsTo(Deal, { foreignKey: 'dealId', as: 'deal' });
 Deal.hasMany(PaymentPlan, { foreignKey: 'dealId', as: 'paymentPlans' });
 PaymentPlan.belongsTo(User, { foreignKey: 'createdByUserId', as: 'creator' });
+
+// TransactionWorkflow Relations
+TransactionWorkflow.belongsTo(Deal, { foreignKey: 'dealId', as: 'deal' });
+Deal.hasMany(TransactionWorkflow, { foreignKey: 'dealId', as: 'workflows' });
+TransactionWorkflow.belongsTo(Property, { foreignKey: 'propertyId', as: 'property' });
+TransactionWorkflow.belongsTo(User, { foreignKey: 'clientId', as: 'client' });
+TransactionWorkflow.belongsTo(User, { foreignKey: 'inspectorId', as: 'inspector' });
+TransactionWorkflow.belongsTo(User, { foreignKey: 'appraiserId', as: 'appraiser' });
+TransactionWorkflow.belongsTo(User, { foreignKey: 'lenderId', as: 'lender' });
+
+// EmailTracking Relations
+EmailTracking.belongsTo(Lead, { foreignKey: 'leadId', as: 'lead' });
+Lead.hasMany(EmailTracking, { foreignKey: 'leadId', as: 'emails' });
+EmailTracking.belongsTo(User, { foreignKey: 'agentId', as: 'agent' });
+User.hasMany(EmailTracking, { foreignKey: 'agentId', as: 'emailTrackings' });
+EmailTracking.belongsTo(Campaign, { foreignKey: 'campaignId', as: 'campaign' });
+Campaign.hasMany(EmailTracking, { foreignKey: 'campaignId', as: 'emails' });
+
+// AuditLog Relations
+AuditLog.belongsTo(User, { foreignKey: 'userId', as: 'user' });
+User.hasMany(AuditLog, { foreignKey: 'userId', as: 'auditLogs' });
+
+// Payment - Invoice Relations
+Payment.belongsTo(Invoice, { foreignKey: 'invoiceId', as: 'invoice' });
+Invoice.hasMany(Payment, { foreignKey: 'invoiceId', as: 'payments' });
+User.hasMany(Payment, { foreignKey: 'recordedByUserId', as: 'recordedPayments' });
+
+// Deal - Group Relation
+Deal.belongsTo(Group, { foreignKey: 'groupId', as: 'group' });
+Group.hasMany(Deal, { foreignKey: 'groupId', as: 'deals' });
+
+// ListingMethod - ListingMethodHistory Relations
+ListingMethod.hasMany(ListingMethodHistory, { foreignKey: 'listingMethodId', as: 'history' });
+ListingMethodHistory.belongsTo(ListingMethod, { foreignKey: 'listingMethodId', as: 'listingMethod' });
+ListingMethodHistory.belongsTo(Property, { foreignKey: 'propertyId', as: 'property' });
+Property.hasMany(ListingMethodHistory, { foreignKey: 'propertyId', as: 'listingHistory' });
 
 // ==========================================
 // NEW: UserGroup - User/Group Relations
@@ -289,6 +351,8 @@ module.exports = {
   Payment,
   PaymentPlan,
   Seller,
+  ListingMethod,
+  ListingMethodHistory,
   UserGroup,
   Role,
   Permission,
