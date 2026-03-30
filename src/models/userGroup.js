@@ -2,11 +2,6 @@ const { DataTypes } = require('sequelize');
 const { sequelize } = require('../config/database');
 
 const UserGroup = sequelize.define('UserGroup', {
-  id: {
-    type: DataTypes.UUID,
-    defaultValue: DataTypes.UUIDV4,
-    primaryKey: true
-  },
   userId: {
     type: DataTypes.UUID,
     allowNull: false,
@@ -34,6 +29,7 @@ const UserGroup = sequelize.define('UserGroup', {
   }
 }, {
   timestamps: true,
+  primaryKey: true,
   indexes: [
     {
       unique: true,
