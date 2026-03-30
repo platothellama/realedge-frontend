@@ -227,8 +227,8 @@ PaymentPlan.belongsTo(User, { foreignKey: 'createdByUserId', as: 'creator' });
 // ==========================================
 UserGroup.belongsTo(User, { foreignKey: 'userId', as: 'user' });
 UserGroup.belongsTo(Group, { foreignKey: 'groupId', as: 'group' });
-User.hasMany(UserGroup, { foreignKey: 'userId', as: 'userGroups' });
-Group.hasMany(UserGroup, { foreignKey: 'groupId', as: 'userGroups' });
+User.hasMany(UserGroup, { foreignKey: 'userId' });
+Group.hasMany(UserGroup, { foreignKey: 'groupId' });
 
 // ==========================================
 // NEW: Role & Permission System

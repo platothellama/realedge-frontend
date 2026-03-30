@@ -3,7 +3,12 @@ const { Group, User, UserGroup } = require('../models/associations');
 exports.getAllGroups = async (req, res) => {
   try {
     const groups = await Group.findAll({
-      include: [{ model: User, as: 'members', attributes: ['id', 'name', 'email'] }]
+      include: [{
+        model: User,
+        as: 'members',
+        through: { attributes: [] },
+        attributes: ['id', 'name', 'email']
+      }]
     });
     res.status(200).json({ status: 'success', data: groups });
   } catch (error) {
