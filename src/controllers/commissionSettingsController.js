@@ -55,7 +55,7 @@ exports.updateCommissionSettings = async (req, res) => {
 exports.getAllSettings = async (req, res) => {
   try {
     const settings = await SystemSetting.findAll({
-      order: [['type', 'ASC'], ['key', 'ASC']]
+      order: [['type', 'ASC'], ['sKey', 'ASC']]
     });
 
     res.status(200).json({
