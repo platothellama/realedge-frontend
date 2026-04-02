@@ -172,31 +172,22 @@ exports.updateDeal = async (req, res) => {
       if (deal.property && deal.property.status === 'Sold') {
         return res.status(400).json({ message: 'Property is already sold' });
       }
-      
-      const propertyUpdate = {};
-      if (deal.property && deal.property.status === 'Reserved') {
-        propertyUpdate.status = 'Sold';
-        propertyUpdate.soldAt = new Date();
-      }
-      
-      if (updateData.finalPrice) {
-        propertyUpdate.soldPrice = updateData.finalPrice;
+
+      if (deal.property) {
+        const propertyUpdate = { status: 'Sold', soldAt: new Date() };
         
-        try {
-          await commissionService.calculateDealCommission(deal.id);
-        } catch (commissionError) {
-          console.warn('Failed to auto-generate commission:', commissionError.message);
+        if (updateData.finalPrice) {
+          propertyUpdate.soldPrice = updateData.finalPrice;
+          
+          try {
+            await commissionService.calculateDealCommission(deal.id);
+          } catch (commissionError) {
+            console.warn('Failed to auto-generate commission:', commissionError.message);
+          }
         }
-      }
-      
-      if (Object.keys(propertyUpdate).length > 0 && deal.property) {
+        
         await deal.property.update(propertyUpdate);
       }
-    }
-
-    // Release property: when deal is lost (Closed with no payment) or deleted
-    if (updateData.dealStage === 'Closed' && deal.property && deal.property.status === 'Reserved') {
-      await deal.property.update({ status: 'Available' });
     }
 
     res.status(200).json(deal);
