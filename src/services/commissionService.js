@@ -186,9 +186,7 @@ class CommissionService {
       const finalPrice = parseFloat(deal.finalPrice) || parseFloat(deal.property?.price) || 0;
       const totalCommission = this.calculatePropertyCommission(deal.property, finalPrice);
       
-      const group = await Group.findByPk(groupId, {
-        attributes: ['id', 'name', 'companyCommission']
-      });
+      const group = await Group.findByPk(groupId);
 
       const companyPercentage = group ? (group.companyCommission || 10) : 10;
       const teamPercentage = 100 - companyPercentage;
