@@ -83,6 +83,26 @@ const Lead = sequelize.define('Lead', {
       model: 'Users',
       key: 'id'
     }
+  },
+  job: {
+    type: DataTypes.STRING,
+    allowNull: true
+  },
+  referenceType: {
+    type: DataTypes.ENUM('lead', 'user', 'text'),
+    allowNull: true
+  },
+  referenceId: {
+    type: DataTypes.UUID,
+    allowNull: true,
+    references: {
+      model: 'Users',
+      key: 'id'
+    }
+  },
+  referenceText: {
+    type: DataTypes.TEXT,
+    allowNull: true
   }
 }, {
   timestamps: true,

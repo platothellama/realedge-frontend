@@ -45,6 +45,11 @@ const Invoice = sequelize.define('Invoice', {
     type: DataTypes.UUID,
     allowNull: true
   },
+  sellerId: {
+    type: DataTypes.UUID,
+    allowNull: true,
+    comment: 'Associated seller/owner'
+  },
   clientName: {
     type: DataTypes.STRING,
     allowNull: false
