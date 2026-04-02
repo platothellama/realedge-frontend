@@ -386,7 +386,7 @@ class CommissionService {
    * @param {String} propertyId 
    * @returns {Object} Commission calculation result
    */
-  async calculatePropertyCommissionDirect(propertyId) {
+  async calculatePropertyCommissionDirect(propertyId, closedDeal = null) {
     const transaction = await sequelize.transaction();
     
     try {
@@ -402,7 +402,7 @@ class CommissionService {
       const settings = await this.getCommissionSettings();
       
       if (property.assignedToGroupId) {
-        return this.calculatePropertyGroupCommission(property, finalPrice, totalCommission, transaction);
+        return this.calculatePropertyGroupCommission(property, finalPrice, totalCommission, transaction, closedDeal);
       }
       
       const agentPercentage = settings.teamPercentage;
@@ -465,12 +465,13 @@ class CommissionService {
   /**
    * Calculate commission for a property sold by a group
    */
-  async calculatePropertyGroupCommission(property, finalPrice, totalCommission, transaction) {
+  async calculatePropertyGroupCommission(property, finalPrice, totalCommission, transaction, closedDeal = null) {
     const groupId = property.assignedToGroupId;
     const group = await Group.findByPk(groupId);
     console.log('group 1112 ', groupId)
     console.log('group 111 ', group)
     console.log('group 222 ', group.companyCommission)
+    console.log('group 222 ', dealId)
     const companyPercentage = group ? (group.companyCommission || 10) : 10;
     const teamPercentage = 100 - companyPercentage;
     
@@ -493,7 +494,7 @@ class CommissionService {
       const memberCommission = teamCommission * (roleSplit / 100);
       
       const dealCommission = await DealCommission.create({
-        dealId: null,
+        dealId: closedDeal,
         userId: member.userId,
         groupId: groupId,
         roleInDeal: member.role,
