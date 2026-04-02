@@ -186,13 +186,23 @@ class CommissionService {
       const finalPrice = parseFloat(deal.finalPrice) || parseFloat(deal.property?.price) || 0;
       const totalCommission = this.calculatePropertyCommission(deal.property, finalPrice);
       
-      const group = await Group.findByPk(groupId);
+      const group = await Group.findByPk(groupId, {
+        attributes: ['id', 'name', 'companyCommission']
+      });
 
-      console.log('group ', group)
       const companyPercentage = group ? (group.companyCommission || 10) : 10;
       const teamPercentage = 100 - companyPercentage;
       const companyCommission = totalCommission * (companyPercentage / 100);
       const teamCommission = totalCommission * (teamPercentage / 100);
+      
+      console.log('Commission Calculation:', {
+        finalPrice,
+        totalCommission,
+        companyPercentage,
+        teamPercentage,
+        companyCommission,
+        teamCommission
+      });
       
       const groupMembers = await UserGroup.findAll({
         where: { groupId },
