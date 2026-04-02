@@ -187,9 +187,10 @@ class CommissionService {
       const totalCommission = this.calculatePropertyCommission(deal.property, finalPrice);
       
       const group = await Group.findByPk(groupId);
+
+      console.log('group ', group)
       const companyPercentage = group ? (group.companyCommission || 10) : 10;
       const teamPercentage = 100 - companyPercentage;
-      
       const companyCommission = totalCommission * (companyPercentage / 100);
       const teamCommission = totalCommission * (teamPercentage / 100);
       
@@ -459,7 +460,9 @@ class CommissionService {
   async calculatePropertyGroupCommission(property, finalPrice, totalCommission, transaction) {
     const groupId = property.assignedToGroupId;
     const group = await Group.findByPk(groupId);
-    
+    console.log('group 1112 ', groupId)
+    console.log('group 111 ', group)
+    console.log('group 222 ', group.companyCommission)
     const companyPercentage = group ? (group.companyCommission || 10) : 10;
     const teamPercentage = 100 - companyPercentage;
     
