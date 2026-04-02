@@ -497,7 +497,7 @@ class CommissionService {
         dealId: closedDeal,
         userId: member.userId,
         groupId: groupId,
-        roleInDeal: member.role,
+        roleInDeal: 'seller_agent',
         percentage: roleSplit,
         amount: memberCommission,
         salePrice: finalPrice,
