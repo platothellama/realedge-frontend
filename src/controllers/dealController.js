@@ -176,14 +176,13 @@ exports.updateDeal = async (req, res) => {
       if (deal.property) {
         const propertyUpdate = { status: 'Sold', soldAt: new Date() };
         
-        if (updateData.finalPrice) {
-          propertyUpdate.soldPrice = updateData.finalPrice;
-          
-          try {
-            await commissionService.calculateDealCommission(deal.id);
-          } catch (commissionError) {
-            console.warn('Failed to auto-generate commission:', commissionError.message);
-          }
+        const soldPrice = updateData.finalPrice || deal.finalPrice || deal.property.price;
+        propertyUpdate.soldPrice = soldPrice;
+        
+        try {
+          await commissionService.calculateDealCommission(deal.id);
+        } catch (commissionError) {
+          console.warn('Failed to auto-generate commission:', commissionError.message);
         }
         
         await deal.property.update(propertyUpdate);

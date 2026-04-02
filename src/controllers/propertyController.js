@@ -232,8 +232,9 @@ exports.updateProperty = async (req, res) => {
       });
 
       if (closedDeal) {
-        await closedDeal.update({ finalPrice: property.price });
-        propertyUpdate.soldPrice = closedDeal.finalPrice;
+        const dealFinalPrice = closedDeal.finalPrice || property.price;
+        await closedDeal.update({ finalPrice: dealFinalPrice });
+        propertyUpdate.soldPrice = dealFinalPrice;
       } else {
         propertyUpdate.soldPrice = property.price;
       }
