@@ -1,4 +1,4 @@
-const { Property, PriceHistory, User, Group, Lead, Seller } = require('../models/associations');
+const { Property, PriceHistory, User, Group, Lead, Seller, Deal } = require('../models/associations');
 const { Op } = require('sequelize');
 const commissionService = require('../services/commissionService');
 
@@ -222,6 +222,24 @@ exports.updateProperty = async (req, res) => {
     }
 
     if (isStatusChangedToSold) {
+      const propertyUpdate = { soldAt: new Date() };
+
+      const closedDeal = await Deal.findOne({
+        where: {
+          propertyId: property.id,
+          dealStage: 'Closed'
+        }
+      });
+
+      if (closedDeal) {
+        await closedDeal.update({ finalPrice: property.price });
+        propertyUpdate.soldPrice = closedDeal.finalPrice;
+      } else {
+        propertyUpdate.soldPrice = property.price;
+      }
+
+      await property.update(propertyUpdate);
+
       try {
         const commissionResult = await commissionService.calculatePropertyCommissionDirect(property.id);
         console.log('Commission calculated for property sale:', commissionResult);
