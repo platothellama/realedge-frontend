@@ -471,7 +471,7 @@ class CommissionService {
     console.log('group 1112 ', groupId)
     console.log('group 111 ', group)
     console.log('group 222 ', group.companyCommission)
-    console.log('group 222 ', dealId)
+    console.log('group 222 ', closedDeal)
     const companyPercentage = group ? (group.companyCommission || 10) : 10;
     const teamPercentage = 100 - companyPercentage;
     
