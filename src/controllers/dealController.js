@@ -173,7 +173,7 @@ exports.updateDeal = async (req, res) => {
         return res.status(400).json({ message: 'Property is already sold' });
       }
       
-      const propertyUpdate: any = {};
+      const propertyUpdate = {};
       if (deal.property && deal.property.status === 'Reserved') {
         propertyUpdate.status = 'Sold';
         propertyUpdate.soldAt = new Date();
