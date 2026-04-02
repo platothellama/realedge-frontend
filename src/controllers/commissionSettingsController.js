@@ -1,4 +1,4 @@
-const { SystemSetting, DealCommission, Deal, User, Group } = require('../models/associations');
+const { SystemSetting, DealCommission, Deal, Property, User, Group } = require('../models/associations');
 const commissionService = require('../services/commissionService');
 
 exports.getCommissionSettings = async (req, res) => {
