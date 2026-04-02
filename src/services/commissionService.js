@@ -402,7 +402,9 @@ class CommissionService {
       const settings = await this.getCommissionSettings();
       
       if (property.assignedToGroupId) {
-        return this.calculatePropertyGroupCommission(property, finalPrice, totalCommission, transaction, closedDeal);
+        const result = await this.calculatePropertyGroupCommission(property, finalPrice, totalCommission, transaction, closedDeal);
+        await transaction.commit();
+        return result;
       }
       
       const agentPercentage = settings.teamPercentage;
