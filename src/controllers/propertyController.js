@@ -31,7 +31,13 @@ exports.getAllProperties = async (req, res) => {
     }
     
     if (status && status !== 'All') {
-      where.status = status;
+      if (status === 'Non-Available') {
+        where.status = {
+          [Op.ne]: 'Available'
+        };
+      } else {
+        where.status = status;
+      }
     }
     
     if (type && type !== 'All') {

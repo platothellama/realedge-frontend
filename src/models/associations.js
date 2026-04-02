@@ -207,6 +207,10 @@ Property.hasMany(Invoice, { foreignKey: 'propertyId', as: 'invoices' });
 Invoice.belongsTo(Deal, { foreignKey: 'dealId', as: 'deal' });
 Deal.hasMany(Invoice, { foreignKey: 'dealId', as: 'invoices' });
 
+// Seller - Invoice Relations
+Seller.hasMany(Invoice, { foreignKey: 'sellerId', as: 'invoices' });
+Invoice.belongsTo(Seller, { foreignKey: 'sellerId', as: 'seller' });
+
 // Expense Relations
 Expense.belongsTo(User, { foreignKey: 'createdByUserId', as: 'creator' });
 User.hasMany(Expense, { foreignKey: 'createdByUserId', as: 'expenses' });
