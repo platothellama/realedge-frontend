@@ -101,7 +101,8 @@ class CommissionService {
       const deal = await Deal.findByPk(dealId, {
         include: [
           { model: Property, as: 'property' },
-          { model: User, as: 'broker' }
+          { model: User, as: 'broker' },
+          { model: Group, as: 'dealGroup' }
         ]
       });
       
@@ -115,7 +116,7 @@ class CommissionService {
       const settings = await this.getCommissionSettings();
       
       const agentPercentage = settings.teamPercentage;
-      const companyPercentage = settings.companyPercentage;
+      const companyPercentage = deal.dealGroup ? (deal.dealGroup.companyCommission || settings.companyPercentage) : settings.companyPercentage;
       
       const agentCommission = totalCommission * (agentPercentage / 100);
       const companyCommission = totalCommission * (companyPercentage / 100);
@@ -279,7 +280,7 @@ class CommissionService {
       throw new Error('Deal not found');
     }
     
-    if (deal.assignedToGroupId) {
+    if (deal.groupId) {
       return this.calculateGroupCommission(dealId);
     }
     
