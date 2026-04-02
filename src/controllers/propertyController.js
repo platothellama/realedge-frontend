@@ -1,5 +1,6 @@
 const { Property, PriceHistory, User, Group, Lead, Seller } = require('../models/associations');
 const { Op } = require('sequelize');
+const commissionService = require('../services/commissionService');
 
 exports.getAllProperties = async (req, res) => {
   try {
@@ -207,6 +208,8 @@ exports.updateProperty = async (req, res) => {
 
     const oldPrice = parseFloat(property.price);
     const newPrice = parseFloat(req.body.price);
+    const newStatus = req.body.status;
+    const isStatusChangedToSold = newStatus === 'Sold' && property.status !== 'Sold';
 
     await property.update(propertyData);
 
@@ -216,6 +219,15 @@ exports.updateProperty = async (req, res) => {
         price: newPrice,
         note: `Price updated from ${oldPrice} to ${newPrice}`
       });
+    }
+
+    if (isStatusChangedToSold) {
+      try {
+        const commissionResult = await commissionService.calculatePropertyCommissionDirect(property.id);
+        console.log('Commission calculated for property sale:', commissionResult);
+      } catch (commissionError) {
+        console.warn('Failed to auto-generate commission:', commissionError.message);
+      }
     }
 
     const result = await Property.findByPk(property.id, {

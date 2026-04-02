@@ -354,7 +354,137 @@ class CommissionService {
       await setting.update({ value: { company, team } });
     }
     
-    return setting;
+      return setting;
+  }
+
+  /**
+   * Calculate commission for a property sold directly (without a deal)
+   * @param {String} propertyId 
+   * @returns {Object} Commission calculation result
+   */
+  async calculatePropertyCommissionDirect(propertyId) {
+    const transaction = await sequelize.transaction();
+    
+    try {
+      const property = await Property.findByPk(propertyId);
+      
+      if (!property) {
+        throw new Error('Property not found');
+      }
+      
+      const finalPrice = parseFloat(property.price) || 0;
+      const totalCommission = this.calculatePropertyCommission(property, finalPrice);
+      
+      const settings = await this.getCommissionSettings();
+      
+      if (property.assignedToGroupId) {
+        return this.calculatePropertyGroupCommission(property, finalPrice, totalCommission, transaction);
+      }
+      
+      const agentPercentage = settings.teamPercentage;
+      const companyPercentage = settings.companyPercentage;
+      
+      const agentCommission = totalCommission * (agentPercentage / 100);
+      const companyCommission = totalCommission * (companyPercentage / 100);
+      
+      const agentId = property.assignedToUserId;
+      
+      if (!agentId) {
+        await transaction.rollback();
+        return {
+          propertyId: property.id,
+          totalCommission,
+          companyCommission,
+          companyPercentage,
+          agentCommission: 0,
+          agentPercentage: 0,
+          commissions: [],
+          type: 'individual',
+          message: 'No agent assigned to property'
+        };
+      }
+      
+      const dealCommission = await DealCommission.create({
+        dealId: null,
+        userId: agentId,
+        groupId: null,
+        roleInDeal: 'seller_agent',
+        percentage: agentPercentage,
+        amount: agentCommission,
+        status: 'pending',
+        notes: `Commission for property sale: ${property.title}`
+      }, { transaction });
+      
+      await transaction.commit();
+      
+      return {
+        propertyId: property.id,
+        totalCommission,
+        companyCommission,
+        companyPercentage,
+        agentCommission,
+        agentPercentage,
+        commissions: [dealCommission],
+        type: 'individual'
+      };
+    } catch (error) {
+      await transaction.rollback();
+      throw error;
+    }
+  }
+
+  /**
+   * Calculate commission for a property sold by a group
+   */
+  async calculatePropertyGroupCommission(property, finalPrice, totalCommission, transaction) {
+    const groupId = property.assignedToGroupId;
+    const group = await Group.findByPk(groupId);
+    
+    const companyPercentage = group ? (group.companyCommission || 10) : 10;
+    const teamPercentage = 100 - companyPercentage;
+    
+    const companyCommission = totalCommission * (companyPercentage / 100);
+    const teamCommission = totalCommission * (teamPercentage / 100);
+    
+    const groupMembers = await UserGroup.findAll({
+      where: { groupId },
+      include: [{ model: User, as: 'user', attributes: ['id', 'name', 'email'] }]
+    });
+    
+    if (groupMembers.length === 0) {
+      throw new Error('No members found in group');
+    }
+    
+    const commissions = [];
+    
+    for (const member of groupMembers) {
+      const roleSplit = this.getRoleSplitPercentage(member.role, member.commissionSplit);
+      const memberCommission = teamCommission * (roleSplit / 100);
+      
+      const dealCommission = await DealCommission.create({
+        dealId: null,
+        userId: member.userId,
+        groupId: groupId,
+        roleInDeal: member.role,
+        percentage: roleSplit,
+        amount: memberCommission,
+        status: 'pending',
+        notes: `Commission for property sale: ${property.title}`
+      }, { transaction });
+      
+      commissions.push(dealCommission);
+    }
+    
+    return {
+      propertyId: property.id,
+      totalCommission,
+      companyCommission,
+      companyPercentage,
+      teamCommission,
+      teamPercentage,
+      commissions,
+      type: 'group'
+    };
   }
 }
 
