@@ -125,8 +125,15 @@ exports.getCommissionsSummary = async (req, res) => {
     const commissions = await DealCommission.findAll({
       where,
       include: [
-        { model: User, as: 'user', attributes: ['id', 'name', 'email'] },
-        { model: Deal, as: 'deal', attributes: ['id', 'title', 'finalPrice'] },
+        { model: User, as: 'user', attributes: ['id', 'name', 'email', 'photo'] },
+        { 
+          model: Deal, 
+          as: 'deal', 
+          attributes: ['id', 'title', 'finalPrice', 'closedAt'],
+          include: [
+            { model: Property, as: 'property', attributes: ['id', 'title', 'address'] }
+          ]
+        },
         { model: Group, as: 'group', attributes: ['id', 'name'] }
       ],
       order: [['createdAt', 'DESC']]

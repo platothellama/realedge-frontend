@@ -20,8 +20,28 @@ const Property = sequelize.define('Property', {
     allowNull: false
   },
   status: {
-    type: DataTypes.ENUM('Available', 'Sold', 'Rented', 'Reserved'),
+    type: DataTypes.ENUM('Available', 'Sold', 'Rented', 'Reserved', 'Lost'),
     defaultValue: 'Available'
+  },
+  soldTo: {
+    type: DataTypes.STRING,
+    allowNull: true,
+    comment: 'Name of buyer when property is sold'
+  },
+  soldAt: {
+    type: DataTypes.DATE,
+    allowNull: true,
+    comment: 'Date when property was sold'
+  },
+  lostTo: {
+    type: DataTypes.STRING,
+    allowNull: true,
+    comment: 'Reason or competitor when property was lost'
+  },
+  lostAt: {
+    type: DataTypes.DATE,
+    allowNull: true,
+    comment: 'Date when property was lost'
   },
   type: {
     type: DataTypes.ENUM('Apartment', 'House', 'Villa', 'Office', 'Land', 'Commercial'),

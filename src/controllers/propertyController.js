@@ -183,6 +183,10 @@ exports.updateProperty = async (req, res) => {
     const property = await Property.findByPk(req.params.id);
     if (!property) return res.status(404).json({ message: 'Property not found' });
 
+    if (property.status === 'Sold') {
+      return res.status(400).json({ message: 'Cannot modify a sold property' });
+    }
+
     const { newSeller, sellerId, ...propertyData } = req.body;
 
     let finalSellerId = sellerId;
