@@ -3,7 +3,7 @@ const { Group, User, UserGroup } = require('../models/associations');
 exports.getAllGroups = async (req, res) => {
   try {
     const groups = await Group.findAll({
-      attributes: ['id', 'name', 'description', 'createdAt', 'updatedAt']
+      attributes: ['id', 'name', 'description', 'companyCommission', 'createdAt', 'updatedAt']
     });
 
     const groupsWithMembers = await Promise.all(groups.map(async (group) => {
@@ -27,8 +27,8 @@ exports.getAllGroups = async (req, res) => {
 
 exports.createGroup = async (req, res) => {
   try {
-    const { name, description, userIds } = req.body;
-    const group = await Group.create({ name, description });
+    const { name, description, userIds, companyCommission } = req.body;
+    const group = await Group.create({ name, description, companyCommission: companyCommission || 10 });
     
     if (userIds && userIds.length > 0) {
       for (const userId of userIds) {
@@ -50,11 +50,11 @@ exports.createGroup = async (req, res) => {
 
 exports.updateGroup = async (req, res) => {
   try {
-    const { name, description, userIds } = req.body;
+    const { name, description, userIds, companyCommission } = req.body;
     const group = await Group.findByPk(req.params.id);
     if (!group) return res.status(404).json({ status: 'fail', message: 'Group not found' });
 
-    await group.update({ name, description });
+    await group.update({ name, description, companyCommission });
     
     if (userIds) {
       await UserGroup.destroy({ where: { groupId: group.id } });

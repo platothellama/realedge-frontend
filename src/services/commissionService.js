@@ -148,6 +148,7 @@ class CommissionService {
 
   /**
    * Calculate commission for a group sale
+   * Uses group's companyCommission percentage instead of global settings
    * @param {String} dealId 
    * @returns {Object} Commission calculation result
    */
@@ -175,9 +176,9 @@ class CommissionService {
       const finalPrice = parseFloat(deal.finalPrice) || parseFloat(deal.commission);
       const totalCommission = this.calculatePropertyCommission(deal.property, finalPrice);
       
-      const settings = await this.getCommissionSettings();
-      const companyPercentage = settings.companyPercentage;
-      const teamPercentage = settings.teamPercentage;
+      const group = await Group.findByPk(groupId);
+      const companyPercentage = group ? (group.companyCommission || 10) : 10;
+      const teamPercentage = 100 - companyPercentage;
       
       const companyCommission = totalCommission * (companyPercentage / 100);
       const teamCommission = totalCommission * (teamPercentage / 100);
