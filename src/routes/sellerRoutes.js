@@ -35,6 +35,39 @@ router.get('/', async (req, res) => {
   }
 });
 
+router.get('/:id/stats', async (req, res) => {
+  try {
+    const sellerId = req.params.id;
+    
+    const properties = await Property.findAll({ where: { sellerId } });
+    const deals = await Deal.findAll({ where: { sellerId } });
+    const invoices = await Invoice.findAll({ where: { sellerId } });
+    
+    const closedDeals = deals.filter(d => d.dealStage === 'Closed');
+    
+    const totalPropertyValue = properties.reduce((sum, p) => sum + (parseFloat(p.price) || 0), 0);
+    const totalDealValue = closedDeals.reduce((sum, d) => sum + (parseFloat(d.finalPrice) || 0), 0);
+    const totalCommission = closedDeals.reduce((sum, d) => sum + (parseFloat(d.commission) || 0), 0);
+    const totalInvoiced = invoices.reduce((sum, i) => sum + (parseFloat(i.total) || 0), 0);
+    const totalPaid = invoices.filter(i => i.status === 'Paid').reduce((sum, i) => sum + (parseFloat(i.total) || 0), 0);
+    
+    res.status(200).json({
+      propertiesCount: properties.length,
+      dealsCount: deals.length,
+      closedDealsCount: closedDeals.length,
+      invoicesCount: invoices.length,
+      totalPropertyValue,
+      totalDealValue,
+      totalCommission,
+      totalInvoiced,
+      totalPaid,
+      outstandingAmount: totalInvoiced - totalPaid
+    });
+  } catch (error) {
+    res.status(500).json({ message: 'Error fetching seller stats', error: error.message });
+  }
+});
+
 router.get('/:id', async (req, res) => {
   try {
     const seller = await Seller.findByPk(req.params.id, {
@@ -103,39 +136,6 @@ router.delete('/:id', async (req, res) => {
     res.status(200).json({ message: 'Seller deleted successfully' });
   } catch (error) {
     res.status(500).json({ message: 'Error deleting seller', error: error.message });
-  }
-});
-
-router.get('/:id/stats', async (req, res) => {
-  try {
-    const sellerId = req.params.id;
-    
-    const properties = await Property.findAll({ where: { sellerId } });
-    const deals = await Deal.findAll({ where: { sellerId } });
-    const invoices = await Invoice.findAll({ where: { sellerId } });
-    
-    const closedDeals = deals.filter(d => d.dealStage === 'Closed');
-    
-    const totalPropertyValue = properties.reduce((sum, p) => sum + (parseFloat(p.price) || 0), 0);
-    const totalDealValue = closedDeals.reduce((sum, d) => sum + (parseFloat(d.finalPrice) || 0), 0);
-    const totalCommission = closedDeals.reduce((sum, d) => sum + (parseFloat(d.commission) || 0), 0);
-    const totalInvoiced = invoices.reduce((sum, i) => sum + (parseFloat(i.total) || 0), 0);
-    const totalPaid = invoices.filter(i => i.status === 'Paid').reduce((sum, i) => sum + (parseFloat(i.total) || 0), 0);
-    
-    res.status(200).json({
-      propertiesCount: properties.length,
-      dealsCount: deals.length,
-      closedDealsCount: closedDeals.length,
-      invoicesCount: invoices.length,
-      totalPropertyValue,
-      totalDealValue,
-      totalCommission,
-      totalInvoiced,
-      totalPaid,
-      outstandingAmount: totalInvoiced - totalPaid
-    });
-  } catch (error) {
-    res.status(500).json({ message: 'Error fetching seller stats', error: error.message });
   }
 });
 
