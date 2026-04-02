@@ -47,6 +47,31 @@ const DealCommission = sequelize.define('DealCommission', {
     allowNull: false,
     comment: 'Calculated commission amount'
   },
+  salePrice: {
+    type: DataTypes.DECIMAL(15, 2),
+    allowNull: true,
+    comment: 'Property sale price'
+  },
+  totalCommission: {
+    type: DataTypes.DECIMAL(15, 2),
+    allowNull: true,
+    comment: 'Total gross commission'
+  },
+  companyAmount: {
+    type: DataTypes.DECIMAL(15, 2),
+    allowNull: true,
+    comment: 'Company portion of commission'
+  },
+  companyPercentage: {
+    type: DataTypes.FLOAT,
+    allowNull: true,
+    comment: 'Company percentage split'
+  },
+  agentAmount: {
+    type: DataTypes.DECIMAL(15, 2),
+    allowNull: true,
+    comment: 'Agent portion of commission (same as amount)'
+  },
   status: {
     type: DataTypes.ENUM('pending', 'approved', 'paid'),
     defaultValue: 'pending'

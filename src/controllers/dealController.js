@@ -180,9 +180,11 @@ exports.updateDeal = async (req, res) => {
         propertyUpdate.soldPrice = soldPrice;
         
         try {
-          await commissionService.calculateDealCommission(deal.id);
+          console.log('Calculating commission for deal:', deal.id, 'finalPrice:', soldPrice);
+          const commissionResult = await commissionService.calculateDealCommission(deal.id);
+          console.log('Commission calculated successfully:', commissionResult);
         } catch (commissionError) {
-          console.warn('Failed to auto-generate commission:', commissionError.message);
+          console.error('Failed to auto-generate commission:', commissionError);
         }
         
         await deal.property.update(propertyUpdate);

@@ -49,15 +49,19 @@ class CommissionService {
     
     const { commissionType, commissionValue, commissionPercentage } = property;
     
-    if (commissionType === 'fixed' && commissionValue) {
+    console.log('Calculating commission:', { commissionType, commissionValue, commissionPercentage, finalPrice });
+    
+    if (commissionType === 'fixed' && commissionValue != null) {
       return parseFloat(commissionValue);
     }
     
-    if (commissionType === 'percentage' && commissionValue) {
+    if (commissionType === 'percentage' && commissionValue != null) {
       return parseFloat(finalPrice) * (parseFloat(commissionValue) / 100);
     }
     
-    return parseFloat(finalPrice) * (parseFloat(commissionPercentage || 0) / 100);
+    const fallbackCommission = parseFloat(finalPrice) * (parseFloat(commissionPercentage || 0) / 100);
+    console.log('Fallback commission calculation:', fallbackCommission);
+    return fallbackCommission;
   }
 
   /**
@@ -97,7 +101,7 @@ class CommissionService {
       const deal = await Deal.findByPk(dealId, {
         include: [
           { model: Property, as: 'property' },
-          { model: User, as: 'agent' }
+          { model: User, as: 'broker' }
         ]
       });
       
@@ -105,7 +109,7 @@ class CommissionService {
         throw new Error('Deal not found');
       }
       
-      const finalPrice = parseFloat(deal.finalPrice) || parseFloat(deal.commission);
+      const finalPrice = parseFloat(deal.finalPrice) || parseFloat(deal.property?.price) || 0;
       const totalCommission = this.calculatePropertyCommission(deal.property, finalPrice);
       
       const settings = await this.getCommissionSettings();
@@ -120,11 +124,16 @@ class CommissionService {
       
       const dealCommission = await DealCommission.create({
         dealId: deal.id,
-        userId: deal.agentId,
+        userId: deal.brokerId,
         groupId: null,
         roleInDeal: 'seller_agent',
         percentage: agentPercentage,
         amount: agentCommission,
+        salePrice: finalPrice,
+        totalCommission: totalCommission,
+        companyAmount: companyCommission,
+        companyPercentage: companyPercentage,
+        agentAmount: agentCommission,
         status: 'pending'
       }, { transaction });
       
@@ -159,8 +168,8 @@ class CommissionService {
       const deal = await Deal.findByPk(dealId, {
         include: [
           { model: Property, as: 'property' },
-          { model: User, as: 'agent' },
-          { model: Group, as: 'assignedGroup' }
+          { model: User, as: 'broker' },
+          { model: Group, as: 'dealGroup' }
         ]
       });
       
@@ -168,12 +177,12 @@ class CommissionService {
         throw new Error('Deal not found');
       }
       
-      const groupId = deal.assignedToGroupId;
+      const groupId = deal.groupId;
       if (!groupId) {
         return this.calculateIndividualCommission(dealId);
       }
       
-      const finalPrice = parseFloat(deal.finalPrice) || parseFloat(deal.commission);
+      const finalPrice = parseFloat(deal.finalPrice) || parseFloat(deal.property?.price) || 0;
       const totalCommission = this.calculatePropertyCommission(deal.property, finalPrice);
       
       const group = await Group.findByPk(groupId);
@@ -228,6 +237,11 @@ class CommissionService {
             roleInDeal,
             percentage: member.roleSplit,
             amount: memberAmount,
+            salePrice: finalPrice,
+            totalCommission: totalCommission,
+            companyAmount: companyCommission,
+            companyPercentage: companyPercentage,
+            agentAmount: memberAmount,
             status: 'pending'
           }, { transaction });
         })
@@ -411,6 +425,11 @@ class CommissionService {
         roleInDeal: 'seller_agent',
         percentage: agentPercentage,
         amount: agentCommission,
+        salePrice: finalPrice,
+        totalCommission: totalCommission,
+        companyAmount: companyCommission,
+        companyPercentage: companyPercentage,
+        agentAmount: agentCommission,
         status: 'pending',
         notes: `Commission for property sale: ${property.title}`
       }, { transaction });
@@ -468,6 +487,11 @@ class CommissionService {
         roleInDeal: member.role,
         percentage: roleSplit,
         amount: memberCommission,
+        salePrice: finalPrice,
+        totalCommission: totalCommission,
+        companyAmount: companyCommission,
+        companyPercentage: companyPercentage,
+        agentAmount: memberCommission,
         status: 'pending',
         notes: `Commission for property sale: ${property.title}`
       }, { transaction });

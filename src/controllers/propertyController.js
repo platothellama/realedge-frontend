@@ -242,10 +242,11 @@ exports.updateProperty = async (req, res) => {
       await property.update(propertyUpdate);
 
       try {
+        console.log('Calculating commission for property:', property.id, 'price:', property.price);
         const commissionResult = await commissionService.calculatePropertyCommissionDirect(property.id);
-        console.log('Commission calculated for property sale:', commissionResult);
+        console.log('Commission calculated successfully:', commissionResult);
       } catch (commissionError) {
-        console.warn('Failed to auto-generate commission:', commissionError.message);
+        console.error('Failed to auto-generate commission:', commissionError);
       }
     }
 
