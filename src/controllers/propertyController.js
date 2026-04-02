@@ -235,8 +235,14 @@ exports.updateProperty = async (req, res) => {
         const dealFinalPrice = closedDeal.finalPrice || property.price;
         await closedDeal.update({ finalPrice: dealFinalPrice });
         propertyUpdate.soldPrice = dealFinalPrice;
+        if (closedDeal.buyerName) {
+          propertyUpdate.soldTo = closedDeal.buyerName;
+        }
       } else {
         propertyUpdate.soldPrice = property.price;
+        if (req.body.soldTo) {
+          propertyUpdate.soldTo = req.body.soldTo;
+        }
       }
 
       await property.update(propertyUpdate);

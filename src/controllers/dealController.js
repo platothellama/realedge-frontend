@@ -179,6 +179,10 @@ exports.updateDeal = async (req, res) => {
         const soldPrice = updateData.finalPrice || deal.finalPrice || deal.property.price;
         propertyUpdate.soldPrice = soldPrice;
         
+        if (deal.buyerName) {
+          propertyUpdate.soldTo = deal.buyerName;
+        }
+        
         try {
           console.log('Calculating commission for deal:', deal.id, 'finalPrice:', soldPrice);
           const commissionResult = await commissionService.calculateDealCommission(deal.id);
