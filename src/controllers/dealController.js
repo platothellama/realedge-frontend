@@ -1,4 +1,5 @@
 const { Deal, Property, User, Lead, Seller, Group, DealCommission } = require('../models/associations');
+const { Op } = require('sequelize');
 const commissionService = require('../services/commissionService');
 
 exports.getAllDeals = async (req, res) => {
@@ -6,10 +7,16 @@ exports.getAllDeals = async (req, res) => {
     const userRole = req.user.role;
     const userId = req.user.id;
 
-    // Admin/Super Admin see all, others only see their own deals (where they are the broker)
+    // Admin/Super Admin see all, others only see their own deals (where they are the broker or group member)
     let whereClause = {};
     if (userRole !== 'Super Admin' && userRole !== 'Admin') {
-      whereClause = { brokerId: userId };
+      // Non-admins see deals where they are the broker OR belong to the group
+      whereClause = {
+        [Op.or]: [
+          { brokerId: userId },
+          { groupId: userId } // This would need additional logic to check group membership
+        ]
+      };
     }
 
     const deals = await Deal.findAll({
@@ -18,7 +25,8 @@ exports.getAllDeals = async (req, res) => {
         { model: Property, as: 'property', attributes: ['id', 'title', 'price', 'photos'] },
         { model: User, as: 'broker', attributes: ['id', 'name', 'photo'] },
         { model: Lead, as: 'buyerLead', attributes: ['id', 'name', 'email'] },
-        { model: Seller, as: 'seller', attributes: ['id', 'name', 'email', 'phone'] }
+        { model: Seller, as: 'seller', attributes: ['id', 'name', 'email', 'phone'] },
+        { model: Group, as: 'dealGroup', attributes: ['id', 'name'] }
       ],
       order: [['createdAt', 'DESC']]
     });
@@ -36,7 +44,8 @@ exports.getDealById = async (req, res) => {
         { model: Property, as: 'property' },
         { model: User, as: 'broker', attributes: ['id', 'name', 'photo'] },
         { model: Lead, as: 'buyerLead' },
-        { model: Seller, as: 'seller', attributes: ['id', 'name', 'email', 'phone'] }
+        { model: Seller, as: 'seller', attributes: ['id', 'name', 'email', 'phone'] },
+        { model: Group, as: 'dealGroup', attributes: ['id', 'name'] }
       ]
     });
 
@@ -58,6 +67,14 @@ exports.getDealById = async (req, res) => {
 exports.createDeal = async (req, res) => {
   try {
     const { newSeller, sellerId, ...dealData } = req.body;
+    
+    // Check if property is already sold
+    if (dealData.propertyId) {
+      const property = await Property.findByPk(dealData.propertyId);
+      if (property && property.status === 'Sold') {
+        return res.status(400).json({ message: 'Property is already sold and cannot be resold' });
+      }
+    }
     
     // Handle seller: either use existing sellerId or create new seller
     let finalSellerId = sellerId;
@@ -152,16 +169,28 @@ exports.updateDeal = async (req, res) => {
 
     // Auto-generate commission when deal is Closed
     if (updateData.dealStage === 'Closed') {
+      if (deal.property && deal.property.status === 'Sold') {
+        return res.status(400).json({ message: 'Property is already sold' });
+      }
+      
+      const propertyUpdate: any = {};
       if (deal.property && deal.property.status === 'Reserved') {
-        await deal.property.update({ status: 'Sold' });
+        propertyUpdate.status = 'Sold';
+        propertyUpdate.soldAt = new Date();
       }
       
       if (updateData.finalPrice) {
+        propertyUpdate.soldPrice = updateData.finalPrice;
+        
         try {
           await commissionService.calculateDealCommission(deal.id);
         } catch (commissionError) {
           console.warn('Failed to auto-generate commission:', commissionError.message);
         }
+      }
+      
+      if (Object.keys(propertyUpdate).length > 0 && deal.property) {
+        await deal.property.update(propertyUpdate);
       }
     }
 

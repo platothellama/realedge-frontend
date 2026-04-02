@@ -23,6 +23,11 @@ const Property = sequelize.define('Property', {
     type: DataTypes.ENUM('Available', 'Sold', 'Rented', 'Reserved', 'Lost'),
     defaultValue: 'Available'
   },
+  soldPrice: {
+    type: DataTypes.DECIMAL(15, 2),
+    allowNull: true,
+    comment: 'Actual sale price when property is sold'
+  },
   soldTo: {
     type: DataTypes.STRING,
     allowNull: true,

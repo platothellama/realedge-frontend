@@ -26,6 +26,10 @@ exports.convertToDeal = async (req, res) => {
       return res.status(404).json({ message: 'Property not found' });
     }
 
+    if (property.status === 'Sold') {
+      return res.status(400).json({ message: 'Property is already sold and cannot be resold' });
+    }
+
     let commission = 0;
     if (property.commissionPercentage > 0) {
       commission = (Number(property.price) * property.commissionPercentage) / 100;
