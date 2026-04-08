@@ -324,3 +324,27 @@ exports.addNegotiation = async (req, res) => {
     res.status(400).json({ message: 'Error adding negotiation', error: error.message });
   }
 };
+
+exports.getUniqueFeatures = async (req, res) => {
+  try {
+    const properties = await Property.findAll({
+      attributes: ['features'],
+      where: {
+        features: {
+          [Op.ne]: null
+        }
+      }
+    });
+
+    const allFeatures = properties
+      .map(p => p.features)
+      .filter(f => Array.isArray(f))
+      .flat();
+
+    const uniqueFeatures = [...new Set(allFeatures)].sort();
+
+    res.status(200).json(uniqueFeatures);
+  } catch (error) {
+    res.status(400).json({ message: 'Error fetching features', error: error.message });
+  }
+};

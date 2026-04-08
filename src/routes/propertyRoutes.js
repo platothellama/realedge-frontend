@@ -20,6 +20,7 @@ router.post('/upload', protect, upload.single('image'), (req, res) => {
 router.use(protect);
 
 router.get('/', propertyController.getAllProperties);
+router.get('/features', propertyController.getUniqueFeatures);
 router.get('/:id', propertyController.getPropertyById);
 
 router.post('/', restrictTo('Super Admin', 'Admin', 'Office Manager', 'Broker'), propertyController.createProperty);
