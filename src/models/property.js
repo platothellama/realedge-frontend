@@ -100,6 +100,11 @@ const Property = sequelize.define('Property', {
     type: DataTypes.JSON,
     defaultValue: []
   },
+  primaryPhotoIndex: {
+    type: DataTypes.INTEGER,
+    defaultValue: 0,
+    comment: 'Index of the primary photo in the photos array'
+  },
   videos: {
     type: DataTypes.JSON,
     defaultValue: []
