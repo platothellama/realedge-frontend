@@ -93,6 +93,18 @@ exports.createDeal = async (req, res) => {
       dealData.sellerId = finalSellerId;
     }
     
+    if (!dealData.sellerName && dealData.propertyId) {
+      const propertyWithSeller = await Property.findByPk(dealData.propertyId, {
+        include: [{ model: Seller, as: 'seller' }]
+      });
+      if (propertyWithSeller?.seller) {
+        dealData.sellerName = propertyWithSeller.seller.name;
+        if (!dealData.sellerId) {
+          dealData.sellerId = propertyWithSeller.seller.id;
+        }
+      }
+    }
+    
     // Auto-assign broker if not provided
     if (!dealData.brokerId) {
       dealData.brokerId = req.user.id;
