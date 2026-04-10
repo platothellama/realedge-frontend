@@ -102,6 +102,10 @@ exports.createDeal = async (req, res) => {
         if (!dealData.sellerId) {
           dealData.sellerId = propertyWithSeller.seller.id;
         }
+      } else {
+        return res.status(400).json({ 
+          message: 'Cannot create deal: Property has no seller assigned. Please assign a seller to this property first.' 
+        });
       }
     }
     
