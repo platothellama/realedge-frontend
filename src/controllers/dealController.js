@@ -114,19 +114,12 @@ exports.createDeal = async (req, res) => {
       dealData.brokerId = req.user.id;
     }
 
-    // Fetch property to calculate automatic commission
+    // Calculate automatic commission from property
     if (dealData.propertyId) {
       const property = await Property.findByPk(dealData.propertyId);
       if (property && property.commissionPercentage > 0) {
-        const autoCommission = (Number(property.price) * property.commissionPercentage) / 100;
-        
-        // Only override if user is NOT admin OR if commission wasn't explicitly provided
-        const userRole = req.user.role;
-        const isAdmin = userRole === 'Super Admin' || userRole === 'Admin';
-        
-        if (!isAdmin || !dealData.commission) {
-          dealData.commission = autoCommission;
-        }
+        const price = dealData.finalPrice || property.price;
+        dealData.commission = (Number(price) * property.commissionPercentage) / 100;
       }
     }
 

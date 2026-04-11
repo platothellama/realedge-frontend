@@ -1,106 +1,300 @@
-const { Property, Lead, Deal, User, Commission, Expense, Invoice } = require('../models/associations');
+const { Property, Lead, Deal, User, Commission, Expense, Invoice, Visit } = require('../models/associations');
 const { Op } = require('sequelize');
 const { sequelize } = require('../config/database');
+
+const isSuperAdmin = (role) => role === 'Super Admin' || role === 'Admin';
 
 exports.getStats = async (req, res) => {
   try {
     const userRole = req.user?.role;
     const userId = req.user?.id;
+    const userIsSuperAdmin = isSuperAdmin(userRole);
 
     let leadWhere = {};
     let dealWhere = {};
     let propertyWhere = {};
     let commissionWhere = {};
     let expenseWhere = {};
+    let visitWhere = {};
 
-    if (userRole && userRole !== 'Super Admin' && userRole !== 'Admin') {
+    if (!userIsSuperAdmin) {
       leadWhere = { assignedToUserId: userId };
       dealWhere = { brokerId: userId };
       propertyWhere = { assignedToUserId: userId };
       commissionWhere = { agentId: userId };
+      visitWhere = { brokerId: userId };
     }
 
     const now = new Date();
+    const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const endOfDay = new Date(startOfDay.getTime() + 24 * 60 * 60 * 1000 - 1);
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
 
-    const [
-      totalProperties,
-      totalLeads,
-      totalDeals,
-      totalUsers,
-      recentProperties,
-      recentLeads,
-      recentDeals,
-      hotLeads,
-      pendingCommissions,
-      thisMonthRevenue,
-      propertyStatusCounts,
-      propertyTypeCounts,
-      leadSourceCounts,
-      leadStatusCounts
-    ] = await Promise.all([
-      Property.count({ where: propertyWhere }),
-      Lead.count({ where: leadWhere }),
-      Deal.count({ where: dealWhere }),
-      User.count({ where: { active: true } }),
-      Property.findAll({
-        where: propertyWhere,
-        order: [['createdAt', 'DESC']],
-        limit: 5,
-        attributes: ['id', 'title', 'price', 'createdAt', 'type', 'city']
-      }),
-      Lead.findAll({
-        where: leadWhere,
-        order: [['createdAt', 'DESC']],
-        limit: 5,
-        attributes: ['id', 'name', 'source', 'createdAt', 'phone']
-      }),
-      Deal.findAll({
-        where: dealWhere,
-        order: [['createdAt', 'DESC']],
-        limit: 5,
-        attributes: ['id', 'title', 'dealStage', 'commission', 'createdAt']
-      }),
-      Lead.count({ where: { ...leadWhere, status: 'Hot' } }),
-      Commission.sum('agentCommission', { where: { ...commissionWhere, status: 'pending' } }),
-      Deal.sum('commission', {
-        where: {
-          ...dealWhere,
-          dealStage: 'Closed',
-          closedAt: { [Op.gte]: startOfMonth }
-        }
-      }),
-      Property.findAll({
-        where: propertyWhere,
-        attributes: ['status', [sequelize.fn('COUNT', sequelize.col('status')), 'count']],
-        group: ['status']
-      }),
-      Property.findAll({
-        where: propertyWhere,
-        attributes: ['type', [sequelize.fn('COUNT', sequelize.col('type')), 'count']],
-        group: ['type']
-      }),
-      Lead.findAll({
-        where: leadWhere,
-        attributes: ['source', [sequelize.fn('COUNT', sequelize.col('source')), 'count']],
-        group: ['source']
-      }),
-      Lead.findAll({
-        where: leadWhere,
-        attributes: ['status', [sequelize.fn('COUNT', sequelize.col('status')), 'count']],
-        group: ['status']
-      })
-    ]);
+    let userDashboardData = {};
 
-    const totalRevenue = await Deal.sum('commission', { where: { ...dealWhere, dealStage: 'Closed' } }) || 0;
-    const totalExpenses = await Expense.sum('amount', { where: expenseWhere }) || 0;
+    if (!userIsSuperAdmin) {
+      const [
+        todayVisits,
+        missedVisits,
+        upcomingVisits,
+        contactedLeads,
+        uncontactedLeads,
+        propertiesOnHold,
+        propertiesNotHandled,
+        dealsOnHold,
+        dealsNotClosed,
+        totalCommissionEarned,
+        myHotLeads,
+        completedVisitsThisWeek
+      ] = await Promise.all([
+        Visit.findAll({
+          where: {
+            ...visitWhere,
+            visitDate: { [Op.between]: [startOfDay, endOfDay] },
+            status: 'Scheduled'
+          },
+          include: [{ model: Property, as: 'property', attributes: ['id', 'title', 'city'] }],
+          order: [['visitDate', 'ASC']],
+          limit: 10
+        }),
+        Visit.count({
+          where: {
+            ...visitWhere,
+            status: 'No Show',
+            visitDate: { [Op.lt]: startOfDay }
+          }
+        }),
+        Visit.findAll({
+          where: {
+            ...visitWhere,
+            status: 'Scheduled',
+            visitDate: { [Op.gt]: endOfDay }
+          },
+          include: [{ model: Property, as: 'property', attributes: ['id', 'title', 'city'] }],
+          order: [['visitDate', 'ASC']],
+          limit: 5
+        }),
+        Lead.count({
+          where: {
+            ...leadWhere,
+            status: { [Op.in]: ['Contacted', 'Qualified', 'Negotiation', 'Visit Scheduled'] }
+          }
+        }),
+        Lead.count({
+          where: {
+            ...leadWhere,
+            status: 'New Lead'
+          }
+        }),
+        Property.count({
+          where: {
+            ...propertyWhere,
+            status: 'Reserved'
+          }
+        }),
+        Property.count({
+          where: {
+            ...propertyWhere,
+            status: 'Available',
+            createdAt: { [Op.lt]: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) }
+          }
+        }),
+        Deal.count({
+          where: {
+            ...dealWhere,
+            dealStage: { [Op.in]: ['Negotiation', 'Reserved'] }
+          }
+        }),
+        Deal.count({
+          where: {
+            ...dealWhere,
+            dealStage: { [Op.in]: ['Negotiation', 'Reserved', 'Contract Signed'] }
+          }
+        }),
+        Commission.sum('agentCommission', {
+          where: {
+            ...commissionWhere,
+            status: { [Op.in]: ['approved', 'paid', 'disbursed'] }
+          }
+        }) || 0,
+        Lead.count({
+          where: {
+            ...leadWhere,
+            status: 'Hot'
+          }
+        }),
+        Visit.count({
+          where: {
+            ...visitWhere,
+            status: 'Completed',
+            visitDate: { [Op.gte]: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) }
+          }
+        })
+      ]);
+
+      userDashboardData = {
+        todayVisits: todayVisits || [],
+        missedVisits: missedVisits || 0,
+        upcomingVisits: upcomingVisits || [],
+        contactedLeads: contactedLeads || 0,
+        uncontactedLeads: uncontactedLeads || 0,
+        propertiesOnHold: propertiesOnHold || 0,
+        propertiesNotHandled: propertiesNotHandled || 0,
+        dealsOnHold: dealsOnHold || 0,
+        dealsNotClosed: dealsNotClosed || 0,
+        totalCommissionEarned: totalCommissionEarned || 0,
+        myHotLeads: myHotLeads || 0,
+        completedVisitsThisWeek: completedVisitsThisWeek || 0
+      };
+    }
+
+    let totalProperties, totalLeads, totalDeals, totalUsers, recentProperties, recentLeads, recentDeals;
+    let hotLeads, pendingCommissions, thisMonthRevenue, propertyStatusCounts, propertyTypeCounts;
+    let leadSourceCounts, leadStatusCounts;
+
+    if (userIsSuperAdmin) {
+      [
+        totalProperties,
+        totalLeads,
+        totalDeals,
+        totalUsers,
+        recentProperties,
+        recentLeads,
+        recentDeals,
+        hotLeads,
+        pendingCommissions,
+        thisMonthRevenue,
+        propertyStatusCounts,
+        propertyTypeCounts,
+        leadSourceCounts,
+        leadStatusCounts
+      ] = await Promise.all([
+        Property.count(),
+        Lead.count(),
+        Deal.count(),
+        User.count({ where: { active: true } }),
+        Property.findAll({
+          order: [['createdAt', 'DESC']],
+          limit: 5,
+          attributes: ['id', 'title', 'price', 'createdAt', 'type', 'city']
+        }),
+        Lead.findAll({
+          order: [['createdAt', 'DESC']],
+          limit: 5,
+          attributes: ['id', 'name', 'source', 'createdAt', 'phone']
+        }),
+        Deal.findAll({
+          order: [['createdAt', 'DESC']],
+          limit: 5,
+          attributes: ['id', 'title', 'dealStage', 'commission', 'createdAt']
+        }),
+        Lead.count({ where: { status: 'Hot' } }),
+        Commission.sum('agentCommission', { where: { status: 'pending' } }),
+        Deal.sum('commission', {
+          where: {
+            dealStage: 'Closed',
+            closedAt: { [Op.gte]: startOfMonth }
+          }
+        }),
+        Property.findAll({
+          attributes: ['status', [sequelize.fn('COUNT', sequelize.col('status')), 'count']],
+          group: ['status']
+        }),
+        Property.findAll({
+          attributes: ['type', [sequelize.fn('COUNT', sequelize.col('type')), 'count']],
+          group: ['type']
+        }),
+        Lead.findAll({
+          attributes: ['source', [sequelize.fn('COUNT', sequelize.col('source')), 'count']],
+          group: ['source']
+        }),
+        Lead.findAll({
+          attributes: ['status', [sequelize.fn('COUNT', sequelize.col('status')), 'count']],
+          group: ['status']
+        })
+      ]);
+    } else {
+      [
+        totalProperties,
+        totalLeads,
+        totalDeals,
+        recentProperties,
+        recentLeads,
+        recentDeals,
+        hotLeads,
+        pendingCommissions,
+        thisMonthRevenue,
+        propertyStatusCounts,
+        propertyTypeCounts,
+        leadSourceCounts,
+        leadStatusCounts
+      ] = await Promise.all([
+        Property.count({ where: propertyWhere }),
+        Lead.count({ where: leadWhere }),
+        Deal.count({ where: dealWhere }),
+        Property.findAll({
+          where: propertyWhere,
+          order: [['createdAt', 'DESC']],
+          limit: 5,
+          attributes: ['id', 'title', 'price', 'createdAt', 'type', 'city']
+        }),
+        Lead.findAll({
+          where: leadWhere,
+          order: [['createdAt', 'DESC']],
+          limit: 5,
+          attributes: ['id', 'name', 'source', 'createdAt', 'phone']
+        }),
+        Deal.findAll({
+          where: dealWhere,
+          order: [['createdAt', 'DESC']],
+          limit: 5,
+          attributes: ['id', 'title', 'dealStage', 'commission', 'createdAt']
+        }),
+        Lead.count({ where: { ...leadWhere, status: 'Hot' } }),
+        Commission.sum('agentCommission', { where: { ...commissionWhere, status: 'pending' } }),
+        Deal.sum('commission', {
+          where: {
+            ...dealWhere,
+            dealStage: 'Closed',
+            closedAt: { [Op.gte]: startOfMonth }
+          }
+        }),
+        Property.findAll({
+          where: propertyWhere,
+          attributes: ['status', [sequelize.fn('COUNT', sequelize.col('status')), 'count']],
+          group: ['status']
+        }),
+        Property.findAll({
+          where: propertyWhere,
+          attributes: ['type', [sequelize.fn('COUNT', sequelize.col('type')), 'count']],
+          group: ['type']
+        }),
+        Lead.findAll({
+          where: leadWhere,
+          attributes: ['source', [sequelize.fn('COUNT', sequelize.col('source')), 'count']],
+          group: ['source']
+        }),
+        Lead.findAll({
+          where: leadWhere,
+          attributes: ['status', [sequelize.fn('COUNT', sequelize.col('status')), 'count']],
+          group: ['status']
+        })
+      ]);
+      totalUsers = await User.count({ where: { active: true } });
+    }
+
+    const totalRevenue = userIsSuperAdmin
+      ? (await Deal.sum('commission', { where: { dealStage: 'Closed' } }) || 0)
+      : (await Deal.sum('commission', { where: { ...dealWhere, dealStage: 'Closed' } }) || 0);
+    
+    const totalExpenses = userIsSuperAdmin
+      ? (await Expense.sum('amount') || 0)
+      : (await Expense.sum('amount', { where: expenseWhere }) || 0);
 
     const monthlyStats = await Deal.findAll({
-      where: {
-        ...dealWhere,
-        dealStage: 'Closed',
-        closedAt: { [Op.ne]: null }
-      },
+      where: userIsSuperAdmin
+        ? { dealStage: 'Closed', closedAt: { [Op.ne]: null } }
+        : { ...dealWhere, dealStage: 'Closed', closedAt: { [Op.ne]: null } },
       attributes: [
         [sequelize.fn('DATE_FORMAT', sequelize.col('closedAt'), '%Y-%m'), 'month'],
         [sequelize.fn('SUM', sequelize.col('commission')), 'revenue']
@@ -111,25 +305,27 @@ exports.getStats = async (req, res) => {
       raw: true
     });
 
-    const topAgents = await User.findAll({
+    const topAgents = userIsSuperAdmin ? await User.findAll({
       where: { role: { [Op.in]: ['Broker', 'Agent'] }, active: true },
       attributes: ['id', 'name', 'photo', 'role'],
       order: [['createdAt', 'ASC']],
       limit: 5
-    });
+    }) : [];
 
     const stats = {
+      isSuperAdmin: userIsSuperAdmin,
+      userRole: userRole,
       overview: {
-        totalProperties,
-        totalLeads,
-        totalDeals,
-        totalUsers,
-        hotLeads,
-        totalRevenue,
+        totalProperties: totalProperties || 0,
+        totalLeads: totalLeads || 0,
+        totalDeals: totalDeals || 0,
+        totalUsers: totalUsers || 0,
+        hotLeads: hotLeads || 0,
+        totalRevenue: totalRevenue || 0,
         pendingCommissions: pendingCommissions || 0,
         thisMonthRevenue: thisMonthRevenue || 0,
-        totalExpenses,
-        netProfit: totalRevenue - totalExpenses
+        totalExpenses: totalExpenses || 0,
+        netProfit: (totalRevenue || 0) - (totalExpenses || 0)
       },
       charts: {
         propertyByStatus: propertyStatusCounts.map(p => ({
@@ -158,11 +354,12 @@ exports.getStats = async (req, res) => {
         }))
       },
       recent: {
-        properties: recentProperties,
-        leads: recentLeads,
-        deals: recentDeals
+        properties: recentProperties || [],
+        leads: recentLeads || [],
+        deals: recentDeals || []
       },
-      topAgents
+      topAgents: topAgents || [],
+      ...(userIsSuperAdmin ? {} : { userDashboard: userDashboardData })
     };
 
     res.status(200).json(stats);
