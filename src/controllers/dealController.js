@@ -124,6 +124,32 @@ exports.createDeal = async (req, res) => {
     }
 
     const deal = await Deal.create(dealData);
+
+    // Auto-generate commission and mark property as Sold when deal is created with Closed stage
+    if (dealData.dealStage === 'Closed' && deal.propertyId) {
+      const property = await Property.findByPk(deal.propertyId);
+      if (property && property.status !== 'Sold') {
+        const propertyUpdate = { status: 'Sold', soldAt: new Date() };
+        
+        const soldPrice = dealData.finalPrice || deal.finalPrice || property.price;
+        propertyUpdate.soldPrice = soldPrice;
+        
+        if (dealData.buyerName) {
+          propertyUpdate.soldTo = dealData.buyerName;
+        }
+        
+        try {
+          console.log('Calculating commission for new deal:', deal.id, 'finalPrice:', soldPrice);
+          const commissionResult = await commissionService.calculateDealCommission(deal.id);
+          console.log('Commission calculated successfully:', commissionResult);
+        } catch (commissionError) {
+          console.error('Failed to auto-generate commission:', commissionError);
+        }
+        
+        await property.update(propertyUpdate);
+      }
+    }
+
     res.status(201).json(deal);
   } catch (error) {
     res.status(400).json({ message: 'Error creating deal', error: error.message });
