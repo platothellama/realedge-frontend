@@ -1,4 +1,4 @@
-const { Lead, PriceHistory, Property, User, Visit, Deal } = require('../models/associations');
+const { Lead, PriceHistory, Property, User, Visit, Deal, Task } = require('../models/associations');
 
 exports.convertToDeal = async (req, res) => {
   try {
@@ -89,6 +89,15 @@ exports.getAllLeads = async (req, res) => {
           model: Visit,
           as: 'visits',
           include: [{ model: Property, as: 'property', attributes: ['id', 'title', 'address', 'city'] }]
+        },
+        {
+          model: Deal,
+          as: 'deals',
+          include: [{ model: Property, as: 'property', attributes: ['id', 'title', 'address', 'city'] }]
+        },
+        {
+          model: Task,
+          as: 'tasks'
         }
       ],
       order: [['createdAt', 'DESC']]
