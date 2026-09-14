@@ -46,6 +46,10 @@ const Expense = sequelize.define('Expense', {
   paidDate: {
     type: DataTypes.DATE,
     allowNull: true
+  },
+  createdByUserId: {
+    type: DataTypes.UUID,
+    allowNull: true
   }
 }, {
   timestamps: true,

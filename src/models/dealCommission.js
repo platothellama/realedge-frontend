@@ -33,7 +33,10 @@ const DealCommission = sequelize.define('DealCommission', {
     comment: 'Nullable for individual sales'
   },
   roleInDeal: {
-    type: DataTypes.ENUM('seller_agent', 'buyer_agent', 'co_agent', 'team_leader'),
+    // PHASE 2 (D6b): granular group roles preserved instead of collapsing
+    // everything to co_agent. Existing DBs need: ALTER TABLE DealCommissions
+    // MODIFY roleInDeal ENUM(... extended list ...).
+    type: DataTypes.ENUM('seller_agent', 'buyer_agent', 'co_agent', 'team_leader', 'senior_agent', 'agent', 'trainee'),
     allowNull: false,
     comment: 'Role of user in this specific deal'
   },
@@ -71,6 +74,15 @@ const DealCommission = sequelize.define('DealCommission', {
     type: DataTypes.DECIMAL(15, 2),
     allowNull: true,
     comment: 'Agent portion of commission (same as amount)'
+  },
+  reserveAmount: {
+    // PHASE 2 (D5): intentional holdback credited to the company reserve on
+    // individual-with-group deals (100 - company% - agent%). Company reserve
+    // total = companyAmount (which already includes the reserve).
+    type: DataTypes.DECIMAL(15, 2),
+    allowNull: true,
+    defaultValue: 0,
+    comment: 'Holdback reserve portion (D5), included in companyAmount'
   },
   status: {
     type: DataTypes.ENUM('pending', 'approved', 'paid'),

@@ -230,6 +230,8 @@ CallLog.belongsTo(Property, { foreignKey: 'propertyId', as: 'property' });
 Property.hasMany(CallLog, { foreignKey: 'propertyId', as: 'callLogs' });
 
 // Website Builder Relations
+Website.belongsTo(User, { foreignKey: 'createdByUserId', as: 'creator' });
+User.hasMany(Website, { foreignKey: 'createdByUserId', as: 'websites' });
 Website.hasMany(WebsitePage, { foreignKey: 'websiteId', as: 'pages' });
 WebsitePage.belongsTo(Website, { foreignKey: 'websiteId' });
 

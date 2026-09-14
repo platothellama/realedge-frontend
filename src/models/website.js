@@ -119,6 +119,10 @@ const Website = sequelize.define('Website', {
   isPrimary: {
     type: DataTypes.BOOLEAN,
     defaultValue: false
+  },
+  createdByUserId: {
+    type: DataTypes.UUID,
+    allowNull: true
   }
 }, {
   timestamps: true

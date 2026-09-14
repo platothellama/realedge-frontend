@@ -11,6 +11,12 @@ router.post('/upload', protect, upload.single('image'), async (req, res) => {
   if (!req.file) {
     return res.status(400).json({ status: 'fail', message: 'No file uploaded' });
   }
+  // PHASE 1: image content must match its extension.
+  try {
+    upload.assertFileMagic(req.file.buffer, req.file.originalname);
+  } catch (magicErr) {
+    return res.status(400).json({ status: 'fail', message: magicErr.message });
+  }
   try {
     const { uploadBuffer } = require('../services/supabaseStorageService');
     const { url, path: storagePath } = await uploadBuffer(
@@ -23,7 +29,9 @@ router.post('/upload', protect, upload.single('image'), async (req, res) => {
     res.status(200).json({ status: 'success', url, path: storagePath });
   } catch (err) {
     console.error('Property image upload failed:', err.message);
-    res.status(500).json({ status: 'fail', message: 'Upload failed', error: err.message });
+    // PHASE 1: never leak storage internals to the client in production.
+    const message = process.env.NODE_ENV === 'production' ? 'Upload failed' : `Upload failed: ${err.message}`;
+    res.status(500).json({ status: 'fail', message });
   }
 });
 

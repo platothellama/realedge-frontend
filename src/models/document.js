@@ -53,7 +53,8 @@ const Document = sequelize.define('Document', {
   },
   visibility: {
     type: DataTypes.ENUM('internal', 'shareable'),
-    defaultValue: 'shareable'
+    // PHASE 2 (D25): least-privilege default internal (was shareable).
+    defaultValue: 'internal'
   },
   signerClient: {
     type: DataTypes.BOOLEAN,
@@ -129,9 +130,10 @@ const Document = sequelize.define('Document', {
     comment: 'Signing order type'
   },
   retentionPeriodDays: {
+    // PHASE 2 (D21): approved 10-year retention (was 7y/2555d).
     type: DataTypes.INTEGER,
-    defaultValue: 2555,
-    comment: 'Data retention period in days (default 7 years)'
+    defaultValue: 3650,
+    comment: 'Data retention period in days (10 years per D21)'
   },
   retentionExpiresAt: {
     type: DataTypes.DATE,

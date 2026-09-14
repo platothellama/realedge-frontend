@@ -115,11 +115,19 @@ class CommissionService {
       
       const settings = await this.getCommissionSettings();
       
+      // PHASE 2 (D5/D7): individual-with-group holdback is INTENTIONAL and
+      // credited to the company reserve. The agent keeps the global team %
+      // and the company absorbs the remainder (company% + holdback), so the
+      // full 100% is always distributed. Splits are admin-configurable
+      // (SystemSetting commission_split; Group.companyCommission 0-100).
       const agentPercentage = settings.teamPercentage;
-      const companyPercentage = deal.dealGroup ? (deal.dealGroup.companyCommission || settings.companyPercentage) : settings.companyPercentage;
-      
+      const companyPercentage = deal.dealGroup ? (deal.dealGroup.companyCommission ?? settings.companyPercentage) : settings.companyPercentage;
+
       const agentCommission = totalCommission * (agentPercentage / 100);
-      const companyCommission = totalCommission * (companyPercentage / 100);
+      // Company residual absorbs any holdback (D5 → company reserve).
+      const companyCommission = totalCommission - agentCommission;
+      const holdbackPercentage = Math.max(0, 100 - companyPercentage - agentPercentage);
+      const holdbackAmount = totalCommission * (holdbackPercentage / 100);
       
       await DealCommission.destroy({ where: { dealId }, transaction });
       
@@ -135,7 +143,9 @@ class CommissionService {
         companyAmount: companyCommission,
         companyPercentage: companyPercentage,
         agentAmount: agentCommission,
-        status: 'pending'
+        reserveAmount: holdbackAmount,
+        status: 'pending',
+        notes: holdbackAmount > 0 ? `Includes holdback reserve ${holdbackAmount.toFixed(2)} (${holdbackPercentage.toFixed(2)}%) per D5` : null
       }, { transaction });
       
       await transaction.commit();
@@ -188,7 +198,8 @@ class CommissionService {
       
       const group = await Group.findByPk(groupId);
 
-      const companyPercentage = group ? (group.companyCommission || 10) : 10;
+      // PHASE 2 (D7): admin-configurable; respect explicit 0.
+      const companyPercentage = group ? (group.companyCommission ?? 10) : 10;
       const teamPercentage = 100 - companyPercentage;
       const companyCommission = totalCommission * (companyPercentage / 100);
       const teamCommission = totalCommission * (teamPercentage / 100);
@@ -237,8 +248,12 @@ class CommissionService {
       const commissions = await Promise.all(
         memberSplits.map(member => {
           const memberAmount = teamCommission * (member.roleSplit / 100);
-          const roleInDeal = member.role === 'team_leader' ? 'team_leader' : 
-                            (member.role === 'senior_agent' ? 'co_agent' : 'co_agent');
+          // PHASE 2 (D6b): preserve granular roles instead of collapsing to
+          // co_agent. Requires roleInDeal ENUM to include senior_agent /
+          // agent / trainee (see models/dealCommission.js).
+          const roleInDeal = ['team_leader', 'senior_agent', 'agent', 'trainee'].includes(member.role)
+            ? member.role
+            : 'co_agent';
           
           return DealCommission.create({
             dealId: deal.id,
@@ -359,7 +374,11 @@ class CommissionService {
    */
   async updateCommissionSettings(settings) {
     const { company, team } = settings;
-    
+
+    // PHASE 2 (D7): splits are admin-configurable; enforce valid range.
+    if (company < 0 || company > 100 || team < 0 || team > 100) {
+      throw new Error('Company and team percentages must each be between 0 and 100');
+    }
     if (company + team !== 100) {
       throw new Error('Company and team percentages must sum to 100');
     }
@@ -470,7 +489,8 @@ class CommissionService {
   async calculatePropertyGroupCommission(property, finalPrice, totalCommission, transaction, closedDeal = null) {
     const groupId = property.assignedToGroupId;
     const group = await Group.findByPk(groupId);
-    const companyPercentage = group ? (group.companyCommission || 10) : 10;
+    // PHASE 2 (D7): admin-configurable; respect explicit 0.
+    const companyPercentage = group ? (group.companyCommission ?? 10) : 10;
     const companyCommission = totalCommission * (companyPercentage / 100);
 
 
@@ -487,17 +507,32 @@ class CommissionService {
       throw new Error('No members found in group');
     }
     
+    // PHASE 2 (D6): normalize the property-group path exactly like the
+    // deal-group path so identical teams produce identical payouts.
+    let totalRolePercentage = 0;
+    const splits = groupMembers.map(m => {
+      const s = this.getRoleSplitPercentage(m.role, m.commissionSplit);
+      totalRolePercentage += s;
+      return { member: m, split: s };
+    });
+    if (totalRolePercentage !== 100 && totalRolePercentage > 0) {
+      const scaleFactor = 100 / totalRolePercentage;
+      splits.forEach(s => { s.split = s.split * scaleFactor; });
+    }
+
     const commissions = [];
-    
-    for (const member of groupMembers) {
-      const roleSplit = this.getRoleSplitPercentage(member.role, member.commissionSplit);
+
+    for (const { member, split: roleSplit } of splits) {
       const memberCommission = teamCommission * (roleSplit / 100);
-      
+      const roleInDeal = ['team_leader', 'senior_agent', 'agent', 'trainee'].includes(member.role)
+        ? member.role
+        : 'seller_agent';
+
       const dealCommission = await DealCommission.create({
         dealId: closedDeal,
         userId: member.userId,
         groupId: groupId,
-        roleInDeal: 'seller_agent',
+        roleInDeal,
         percentage: roleSplit,
         amount: memberCommission,
         salePrice: finalPrice,
@@ -508,7 +543,7 @@ class CommissionService {
         status: 'pending',
         notes: `Commission for property sale: ${property.title}`
       }, { transaction });
-      
+
       commissions.push(dealCommission);
     }
     

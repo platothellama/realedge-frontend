@@ -20,7 +20,9 @@ const Transaction = sequelize.define('Transaction', {
     allowNull: false
   },
   currency: {
-    type: DataTypes.STRING,
+    // PHASE 2 (D25): unified ENUM (was free STRING). Existing DBs need a
+    // mapping migration (map unknown → USD with audit, never coerce blindly).
+    type: DataTypes.ENUM('USD', 'LBP'),
     defaultValue: 'USD'
   },
   description: {

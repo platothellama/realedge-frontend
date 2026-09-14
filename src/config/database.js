@@ -1,6 +1,23 @@
 const { Sequelize } = require('sequelize');
 require('dotenv').config();
 
+// PHASE 1: fail fast in production when mandatory secrets are missing,
+// instead of booting with weak/empty defaults that hide misconfiguration.
+function assertProdEnv() {
+  if (process.env.NODE_ENV !== 'production') return;
+  const missing = [];
+  if (!process.env.JWT_SECRET) missing.push('JWT_SECRET');
+  if (!process.env.DATABASE_URL) {
+    if (!process.env.DB_HOST) missing.push('DB_HOST');
+    if (!process.env.DB_DATABASE && !process.env.DB_NAME) missing.push('DB_DATABASE');
+    if (!process.env.DB_USERNAME) missing.push('DB_USERNAME');
+    if (!process.env.DB_PASSWORD) missing.push('DB_PASSWORD');
+  }
+  if (missing.length > 0) {
+    throw new Error(`Missing mandatory production env vars: ${missing.join(', ')}`);
+  }
+}
+
 let dbConfig;
 
 if (process.env.DATABASE_URL) {
@@ -62,4 +79,4 @@ const connectDB = async () => {
   }
 };
 
-module.exports = { sequelize, connectDB };
+module.exports = { sequelize, connectDB, assertProdEnv };

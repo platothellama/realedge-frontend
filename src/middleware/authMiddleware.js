@@ -14,10 +14,28 @@ exports.protect = async (req, res, next) => {
     }
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const currentUser = await User.findByPk(decoded.id);
+    // PHASE 1: fetch only the fields the request needs (never password,
+    // 2FA secret, or reset tokens) and enforce the active flag on EVERY
+    // request so deactivated users lose access immediately.
+    const currentUser = await User.findByPk(decoded.id, {
+      attributes: ['id', 'name', 'email', 'role', 'photo', 'active', 'passwordChangedAt']
+    });
 
     if (!currentUser) {
       return res.status(401).json({ status: 'fail', message: 'The user belonging to this token no longer exists.' });
+    }
+
+    // PHASE 2 (D24): invalidate tokens issued before the last
+    // password/role/active change (force re-login).
+    if (currentUser.passwordChangedAt && decoded.iat) {
+      const changedAtSec = Math.floor(new Date(currentUser.passwordChangedAt).getTime() / 1000);
+      if (decoded.iat < changedAtSec) {
+        return res.status(401).json({ status: 'fail', code: 'TOKEN_INVALIDATED', message: 'Session invalidated by an account change. Please log in again.' });
+      }
+    }
+
+    if (currentUser.active === false) {
+      return res.status(401).json({ status: 'fail', message: 'This account has been deactivated.' });
     }
 
     // Attach full user object with role
@@ -30,6 +48,13 @@ exports.protect = async (req, res, next) => {
     };
     next();
   } catch (error) {
+    // Distinguish expiry (client should re-login) without leaking internals.
+    if (error && error.name === 'TokenExpiredError') {
+      return res.status(401).json({ status: 'fail', code: 'TOKEN_EXPIRED', message: 'Session expired. Please log in again.' });
+    }
+    if (error && error.name === 'JsonWebTokenError') {
+      return res.status(401).json({ status: 'fail', code: 'INVALID_TOKEN', message: 'Invalid session. Please log in again.' });
+    }
     res.status(401).json({ status: 'fail', message: 'Authentication failed. Please log in again.' });
   }
 };
@@ -40,12 +65,12 @@ exports.protect = async (req, res, next) => {
  */
 exports.restrictTo = (...roles) => {
   return (req, res, next) => {
-    // if (!roles.includes(req.user.role)) {
-    //   return res.status(403).json({
-    //     status: 'fail',
-    //     message: `Permission Denied: Your role (${req.user.role}) does not have access to this resource.`
-    //   });
-    // }
+    if (!roles.includes(req.user.role)) {
+      return res.status(403).json({
+        status: 'fail',
+        message: `Permission Denied: Your role (${req.user.role}) does not have access to this resource.`
+      });
+    }
     next();
   };
 };

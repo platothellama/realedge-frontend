@@ -132,10 +132,25 @@ router.delete('/:id', async (req, res) => {
     const seller = await Seller.findByPk(req.params.id);
     if (!seller) return res.status(404).json({ message: 'Seller not found' });
 
+    // AUDIT-2026-09: a seller with live properties must not vanish, or
+    // properties dangle with sellerId pointing nowhere (verified live:
+    // seller delete succeeded while a property still referenced it).
+    const linkedProperties = await Property.count({ where: { sellerId: seller.id } });
+    if (linkedProperties > 0) {
+      return res.status(409).json({
+        message: `Cannot delete: this seller has ${linkedProperties} linked propertie(s). Reassign or remove them first.`
+      });
+    }
+
     await seller.destroy();
     res.status(200).json({ message: 'Seller deleted successfully' });
   } catch (error) {
-    res.status(500).json({ message: 'Error deleting seller', error: error.message });
+    console.error(`seller delete failed for ${req.params.id}:`, error.message);
+    // Never leak SQL/FK internals (table + constraint names) to the client.
+    const safe = process.env.NODE_ENV === 'production'
+      ? 'Could not delete this seller.'
+      : 'Error deleting seller';
+    res.status(500).json({ message: safe });
   }
 });
 

@@ -50,8 +50,16 @@ const Payment = sequelize.define('Payment', {
   },
   amountInUSD: {
     type: DataTypes.DECIMAL(15, 2),
-    allowNull: false,
-    comment: 'Amount in USD for统一计算'
+    allowNull: true,
+    // PHASE 2 (D11): nullable — LBP rows held pending a valid rate carry
+    // NULL until the rate is supplied, and are excluded from all sums.
+    comment: 'Amount in USD for reporting (NULL while rate held)'
+  },
+  rateDate: {
+    // PHASE 2 (D10): FX rate date (payment-date rule). Never restate history.
+    type: DataTypes.DATE,
+    allowNull: true,
+    comment: 'Date of the exchange rate used (payment-date rule)'
   },
   paymentDate: {
     type: DataTypes.DATE,
@@ -81,7 +89,8 @@ const Payment = sequelize.define('Payment', {
   },
   status: {
     type: DataTypes.ENUM('Pending', 'Confirmed', 'Rejected', 'Refunded'),
-    defaultValue: 'Confirmed',
+    // PHASE 2 (D12/D25): safe default Pending (was fail-open Confirmed).
+    defaultValue: 'Pending',
     comment: 'Payment status'
   },
   recordedByUserId: {

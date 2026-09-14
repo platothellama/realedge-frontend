@@ -1,8 +1,11 @@
 const express = require('express');
 const cors = require('cors');
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
+const multer = require('multer');
 const path = require('path');
 require('dotenv').config();
-const { connectDB, sequelize } = require('./config/database');
+const { connectDB, sequelize, assertProdEnv } = require('./config/database');
 const propertyRoutes = require('./routes/propertyRoutes');
 const sellerRoutes = require('./routes/sellerRoutes');
 const leadRoutes = require('./routes/leadRoutes');
@@ -39,14 +42,91 @@ require('./models/associations');
 const app = express();
 const PORT = process.env.PORT || 8000;
 
-// Middleware
-app.use(cors());
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+// PHASE 1 (production hardening): secure defaults without changing API behavior.
+app.set('trust proxy', 1); // Render/Heroku-style proxies: correct req.ip for throttling/logs.
+
+// CORS allowlist: comma-separated frontend origins via FRONTEND_URL.
+// Dev default keeps localhost SPA working; production MUST set FRONTEND_URL.
+const allowedOrigins = (process.env.FRONTEND_URL || '')
+  .split(',')
+  .map((o) => o.trim())
+  .filter(Boolean);
+if (process.env.NODE_ENV !== 'production' && allowedOrigins.length === 0) {
+  allowedOrigins.push('http://localhost:4200', 'http://localhost:80');
+}
+app.use(cors({
+  origin: (origin, cb) => {
+    if (!origin) return cb(null, true); // curl/health checks, same-origin
+    if (allowedOrigins.includes(origin)) return cb(null, true);
+    return cb(new Error('CORS origin not allowed'));
+  }
+}));
+
+// Security headers. API serves JSON (plus the SPA bundle in production),
+// so keep policies permissive for cross-origin reads:
+// - CORP cross-origin: the deployed SPA fetches this API cross-origin.
+// - COEP disabled: avoids blocking Supabase/Google Maps subresources on pages.
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: 'cross-origin' },
+  crossOriginEmbedderPolicy: false,
+  contentSecurityPolicy: false // SPA + signing pages load Maps/Supabase; tune per-page later.
+}));
+
+// Body limits. Chosen limit: 200kb JSON — the largest legitimate payloads are
+// website sections/campaign content (few KB); file bytes travel as multipart,
+// never JSON, so this cannot break uploads.
+app.use(express.json({ limit: '200kb' }));
+app.use(express.urlencoded({ extended: true, limit: '200kb' }));
+
+// Minimal structured request log (stdout JSON). Redacts auth material and
+// never logs bodies (may contain tokens/PII/payment data).
+app.use((req, res, next) => {
+  const start = Date.now();
+  res.on('finish', () => {
+    const entry = {
+      ts: new Date().toISOString(),
+      method: req.method,
+      path: (req.baseUrl || '') + (req.path || ''),
+      status: res.statusCode,
+      ms: Date.now() - start,
+      ip: req.ip
+    };
+    // console.log keeps the existing log pipeline; no bodies/headers logged.
+    console.log(JSON.stringify({ type: 'http', ...entry }));
+  });
+  next();
+});
+
+// Rate limiting: generous global guard + strict gates on sensitive routes.
+// Limits are per-IP sliding windows; legitimate ERP usage (~100s of calls/day)
+// is far below these ceilings.
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 600,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { status: 'fail', message: 'Too many requests, please slow down.' }
+});
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { status: 'fail', message: 'Too many auth attempts, please try again later.' }
+});
+const aiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { status: 'fail', message: 'AI quota exceeded for now, please try again later.' }
+});
+app.use('/api/', apiLimiter);
+
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
-// Routes
-app.use('/api/auth', authRoutes);
+// Routes (auth + admin + AI carry strict per-route throttles on top of apiLimiter)
+app.use('/api/auth', authLimiter, authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/groups', groupRoutes);
 app.use('/api/properties', propertyRoutes);
@@ -64,13 +144,13 @@ app.use('/api/commissions', commissionRoutes);
 app.use('/api/market', marketRoutes);
 app.use('/api/transactions', transactionRoutes);
 app.use('/api/announcements', announcementRoutes);
-app.use('/api/ai', aiRoutes);
+app.use('/api/ai', aiLimiter, aiRoutes);
 app.use('/api/buyer-preferences', buyerPreferenceRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/operations', operationsRoutes);
 app.use('/api/websites', websiteRoutes);
 app.use('/api/track', trackRoutes);
-app.use('/api/admin', adminRoutes);
+app.use('/api/admin', authLimiter, adminRoutes);
 app.use('/api/features', featureFlagRoutes);
 app.use('/api/payments', paymentRoutes);
 app.use('/api/sign', publicDocumentRoutes);
@@ -80,6 +160,12 @@ app.use('/api/commission-settings', commissionSettingsRoutes);
 app.post('/api/properties/upload', protect, upload.single('image'), async (req, res) => {
   if (!req.file) {
     return res.status(400).json({ status: 'fail', message: 'No file uploaded' });
+  }
+  // PHASE 1: image content must match its extension.
+  try {
+    upload.assertFileMagic(req.file.buffer, req.file.originalname);
+  } catch (magicErr) {
+    return res.status(400).json({ status: 'fail', message: magicErr.message });
   }
   try {
     const { uploadBuffer } = require('./services/supabaseStorageService');
@@ -92,13 +178,60 @@ app.post('/api/properties/upload', protect, upload.single('image'), async (req, 
     res.status(200).json({ status: 'success', url, path: storagePath });
   } catch (err) {
     console.error('Property image upload failed:', err.message);
-    res.status(500).json({ status: 'fail', message: 'Upload failed', error: err.message });
+    // PHASE 1: never leak storage internals to the client in production.
+    const message = process.env.NODE_ENV === 'production' ? 'Upload failed' : `Upload failed: ${err.message}`;
+    res.status(500).json({ status: 'fail', message });
   }
 });
 
-// Health Check
-app.get('/api/health', (req, res) => {
-  res.status(200).json({ status: 'OK', message: 'Express Server is running' });
+// Health Check: liveness + DB reachability without leaking internals.
+// 200 { db: 'up' } when the database answers, 503 { db: 'down' } otherwise
+// (no error text, SQL state, hostnames, or credentials in the response).
+app.get('/api/health', async (req, res) => {
+  try {
+    await sequelize.authenticate();
+    res.status(200).json({ status: 'OK', message: 'Express Server is running', db: 'up' });
+  } catch {
+    res.status(503).json({ status: 'degraded', message: 'Server running, database unavailable', db: 'down' });
+  }
+});
+
+// API 404: JSON (not HTML) for unknown /api/* paths.
+app.use('/api', (req, res) => {
+  res.status(404).json({ status: 'fail', message: `Cannot ${req.method} ${req.path}` });
+});
+
+// Centralized error handler (must be the last app.use before the SPA fallback).
+// - Multer/file errors and oversized bodies -> 400/413 with safe messages.
+// - Production: generic message only (no stack, SQL, paths, or secrets).
+// - Development: include message; full stack stays in server logs only.
+app.use((err, req, res, next) => {
+  const isProd = process.env.NODE_ENV === 'production';
+  console.error(JSON.stringify({
+    type: 'error',
+    ts: new Date().toISOString(),
+    method: req.method,
+    path: (req.baseUrl || '') + (req.path || ''),
+    message: err && err.message ? err.message : 'Unknown error'
+  }));
+  if (res.headersSent) return next(err);
+  if (err && (err.type === 'entity.too.large' || err.status === 413)) {
+    return res.status(413).json({ status: 'fail', message: 'Request body too large.' });
+  }
+  if (err instanceof multer.MulterError) {
+    const message = err.code === 'LIMIT_FILE_SIZE'
+      ? 'File too large. Maximum size is 10MB.'
+      : 'File upload rejected.';
+    return res.status(400).json({ status: 'fail', message });
+  }
+  if (err && err.message === 'CORS origin not allowed') {
+    return res.status(403).json({ status: 'fail', message: 'Origin not allowed.' });
+  }
+  const status = (err && err.status) || 500;
+  return res.status(status).json({
+    status: 'error',
+    message: isProd ? 'Internal server error.' : (err && err.message) || 'Internal server error.'
+  });
 });
 
 // Serve static frontend in production
@@ -106,18 +239,30 @@ if (process.env.NODE_ENV === 'production') {
   const frontendPath = path.join(__dirname, '../../public');
   app.use(express.static(frontendPath));
   
-  app.get('*', (req, res) => {
+  // Express 5 compatible SPA fallback (regex; the legacy '*' pattern throws PathError on Express 5).
+  app.get(/.*/, (req, res) => {
     res.sendFile(path.join(frontendPath, 'index.html'));
   });
 }
 
 // Start Server
 const startServer = async () => {
+  // Fail fast on missing production secrets (PHASE 1). Throws before binding.
+  assertProdEnv();
+
   // Connect to Database
   await connectDB();
-  
-  // Skip sync - tables already exist, just load models
-  console.log('📦 Database connected (skipping sync to preserve existing data)');
+
+  // Safe boot migration: creates missing tables/columns only,
+  // never drops or alters existing data. Required because fresh
+  // databases (and older ones predating new FK columns) otherwise
+  // crash on first query (e.g. Expenses.createdByUserId).
+  try {
+    const bootMigrate = require('./seeders/bootMigrate');
+    await bootMigrate();
+  } catch (err) {
+    console.log(`⚠️  Boot migration skipped: ${err.message}`);
+  }
   
   // Run seeders
   // Seed component templates

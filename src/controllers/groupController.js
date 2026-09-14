@@ -28,7 +28,11 @@ exports.getAllGroups = async (req, res) => {
 exports.createGroup = async (req, res) => {
   try {
     const { name, description, userIds, companyCommission } = req.body;
-    const group = await Group.create({ name, description, companyCommission: companyCommission || 10 });
+    // PHASE 2 (D7): admin-configurable 0-100 (respect explicit 0).
+    if (companyCommission !== undefined && (Number(companyCommission) < 0 || Number(companyCommission) > 100)) {
+      return res.status(400).json({ status: 'fail', message: 'companyCommission must be between 0 and 100' });
+    }
+    const group = await Group.create({ name, description, companyCommission: companyCommission ?? 10 });
     
     if (userIds && userIds.length > 0) {
       for (const userId of userIds) {
@@ -54,7 +58,13 @@ exports.updateGroup = async (req, res) => {
     const group = await Group.findByPk(req.params.id);
     if (!group) return res.status(404).json({ status: 'fail', message: 'Group not found' });
 
-    await group.update({ name, description, companyCommission });
+    // PHASE 2 (D7): admin-configurable 0-100. D21: groups with members,
+    // deals, leads, or properties are RESTRICTed (delete denied below).
+    if (companyCommission !== undefined && (Number(companyCommission) < 0 || Number(companyCommission) > 100)) {
+      return res.status(400).json({ status: 'fail', message: 'companyCommission must be between 0 and 100' });
+    }
+    const ccUpdate = companyCommission === undefined ? {} : { companyCommission: Number(companyCommission) };
+    await group.update({ name, description, ...ccUpdate });
     
     if (userIds) {
       await UserGroup.destroy({ where: { groupId: group.id } });
@@ -79,7 +89,19 @@ exports.deleteGroup = async (req, res) => {
   try {
     const group = await Group.findByPk(req.params.id);
     if (!group) return res.status(404).json({ status: 'fail', message: 'Group not found' });
-    
+
+    // PHASE 2 (D21): RESTRICT if members, deals, leads, or properties link here.
+    const { UserGroup, Deal, Lead, Property } = require('../models/associations');
+    const [members, deals, leads, props] = await Promise.all([
+      UserGroup.count({ where: { groupId: group.id } }),
+      Deal.count({ where: { groupId: group.id } }),
+      Lead.count({ where: { groupId: group.id } }),
+      Property.count({ where: { assignedToGroupId: group.id } })
+    ]);
+    if (members + deals + leads + props > 0) {
+      return res.status(403).json({ status: 'fail', message: 'Group has linked members/deals/leads/properties and cannot be deleted (D21).' });
+    }
+
     await group.destroy();
     res.status(200).json({ status: 'success', message: 'Group deleted successfully' });
   } catch (error) {
@@ -135,8 +157,9 @@ exports.getGroupStats = async (req, res) => {
 const VALID_ROLES = ['team_leader', 'senior_agent', 'agent', 'trainee'];
 
 exports.addUserToGroup = async (req, res) => {
-  const transaction = await require('../config/database').sequelize.transaction();
-  
+  // NOTE: all validation/reads happen BEFORE opening a transaction.
+  // Opening it first and returning early leaked open transactions,
+  // exhausting the pool and hanging subsequent requests.
   try {
     const { id: groupId } = req.params;
     const { userId, role = 'agent', commissionSplit } = req.body;
@@ -146,9 +169,9 @@ exports.addUserToGroup = async (req, res) => {
     }
 
     if (!VALID_ROLES.includes(role)) {
-      return res.status(400).json({ 
-        status: 'fail', 
-        message: `Invalid role. Must be one of: ${VALID_ROLES.join(', ')}` 
+      return res.status(400).json({
+        status: 'fail',
+        message: `Invalid role. Must be one of: ${VALID_ROLES.join(', ')}`
       });
     }
 
@@ -167,9 +190,9 @@ exports.addUserToGroup = async (req, res) => {
     });
 
     if (existingMember) {
-      return res.status(400).json({ 
-        status: 'fail', 
-        message: 'User is already a member of this group' 
+      return res.status(400).json({
+        status: 'fail',
+        message: 'User is already a member of this group'
       });
     }
 
@@ -179,21 +202,28 @@ exports.addUserToGroup = async (req, res) => {
       });
 
       if (existingLeader) {
-        return res.status(400).json({ 
-          status: 'fail', 
-          message: 'Group already has a team leader. Remove the current leader first.' 
+        return res.status(400).json({
+          status: 'fail',
+          message: 'Group already has a team leader. Remove the current leader first.'
         });
       }
     }
 
-    const userGroup = await UserGroup.create({
-      userId,
-      groupId,
-      role,
-      commissionSplit: commissionSplit || null
-    }, { transaction });
+    const transaction = await require('../config/database').sequelize.transaction();
+    let userGroup;
+    try {
+      userGroup = await UserGroup.create({
+        userId,
+        groupId,
+        role,
+        commissionSplit: commissionSplit || null
+      }, { transaction });
 
-    await transaction.commit();
+      await transaction.commit();
+    } catch (txError) {
+      try { await transaction.rollback(); } catch (_) {}
+      throw txError;
+    }
 
     const result = await UserGroup.findByPk(userGroup.id, {
       include: [
@@ -208,14 +238,13 @@ exports.addUserToGroup = async (req, res) => {
       data: result
     });
   } catch (error) {
-    await transaction.rollback();
     res.status(400).json({ status: 'fail', message: 'Error adding user to group', error: error.message });
   }
 };
 
 exports.removeUserFromGroup = async (req, res) => {
-  const transaction = await require('../config/database').sequelize.transaction();
-  
+  // NOTE: reads/validation first — never hold an open transaction across
+  // early returns (see addUserToGroup).
   try {
     const { id: groupId } = req.params;
     const { userId } = req.body;
@@ -232,23 +261,27 @@ exports.removeUserFromGroup = async (req, res) => {
       return res.status(404).json({ status: 'fail', message: 'User is not a member of this group' });
     }
 
-    await userGroup.destroy({ transaction });
+    const transaction = await require('../config/database').sequelize.transaction();
+    try {
+      await userGroup.destroy({ transaction });
+      await transaction.commit();
+    } catch (txError) {
+      try { await transaction.rollback(); } catch (_) {}
+      throw txError;
+    }
 
-    await transaction.commit();
-
-    res.status(200).json({ 
-      status: 'success', 
-      message: 'User removed from group' 
+    res.status(200).json({
+      status: 'success',
+      message: 'User removed from group'
     });
   } catch (error) {
-    await transaction.rollback();
     res.status(400).json({ status: 'fail', message: 'Error removing user from group', error: error.message });
   }
 };
 
 exports.updateGroupRoles = async (req, res) => {
-  const transaction = await require('../config/database').sequelize.transaction();
-  
+  // NOTE: validate everything before opening a transaction so early
+  // returns never leak an open transaction (pool exhaustion/hangs).
   try {
     const { id: groupId } = req.params;
     const { members } = req.body;
@@ -271,22 +304,24 @@ exports.updateGroupRoles = async (req, res) => {
       where: { groupId, role: 'team_leader' }
     });
 
+    // Pre-validate all members (reads only, no transaction yet).
+    const validated = [];
     for (const member of members) {
       const { userId, role, commissionSplit } = member;
 
       if (!VALID_ROLES.includes(role)) {
-        return res.status(400).json({ 
-          status: 'fail', 
-          message: `Invalid role: ${role}. Must be one of: ${VALID_ROLES.join(', ')}` 
+        return res.status(400).json({
+          status: 'fail',
+          message: `Invalid role: ${role}. Must be one of: ${VALID_ROLES.join(', ')}`
         });
       }
 
       if (role === 'team_leader' && existingLeader) {
         const otherLeader = members.find(m => m.role === 'team_leader' && m.userId !== existingLeader.userId);
         if (otherLeader) {
-          return res.status(400).json({ 
-            status: 'fail', 
-            message: 'Cannot assign multiple team leaders. Remove current leader first.' 
+          return res.status(400).json({
+            status: 'fail',
+            message: 'Cannot assign multiple team leaders. Remove current leader first.'
           });
         }
       }
@@ -296,19 +331,28 @@ exports.updateGroupRoles = async (req, res) => {
       });
 
       if (!userGroup) {
-        return res.status(404).json({ 
-          status: 'fail', 
-          message: `User ${userId} is not a member of this group` 
+        return res.status(404).json({
+          status: 'fail',
+          message: `User ${userId} is not a member of this group`
         });
       }
 
-      await userGroup.update({
-        role,
-        commissionSplit: commissionSplit || null
-      }, { transaction });
+      validated.push({ userGroup, role, commissionSplit: commissionSplit || null });
     }
 
-    await transaction.commit();
+    const transaction = await require('../config/database').sequelize.transaction();
+    try {
+      for (const item of validated) {
+        await item.userGroup.update({
+          role: item.role,
+          commissionSplit: item.commissionSplit
+        }, { transaction });
+      }
+      await transaction.commit();
+    } catch (txError) {
+      try { await transaction.rollback(); } catch (_) {}
+      throw txError;
+    }
 
     const updatedMembers = await UserGroup.findAll({
       where: { groupId },
@@ -324,7 +368,6 @@ exports.updateGroupRoles = async (req, res) => {
       data: updatedMembers
     });
   } catch (error) {
-    await transaction.rollback();
     res.status(400).json({ status: 'fail', message: 'Error updating group roles', error: error.message });
   }
 };

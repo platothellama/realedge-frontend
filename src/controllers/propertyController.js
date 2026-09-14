@@ -279,13 +279,29 @@ exports.deleteProperty = async (req, res) => {
   try {
     const property = await Property.findByPk(req.params.id);
     if (!property) return res.status(404).json({ message: 'Property not found' });
-    
+
+    // AUDIT-2026-09: a property referenced by deals is sales history — it
+    // must not vanish (void-only philosophy). Previously this fell through
+    // to a raw FK 500 that leaked table/constraint names to the client.
+    const { Deal } = require('../models/associations');
+    const linkedDeals = await Deal.count({ where: { propertyId: property.id } });
+    if (linkedDeals > 0) {
+      return res.status(409).json({
+        message: `Cannot delete: this property has ${linkedDeals} linked deal(s). Remove or reassign the deals first.`
+      });
+    }
+
     await PriceHistory.destroy({ where: { propertyId: property.id } });
     await property.destroy();
-    
+
     res.status(200).json({ message: 'Property and history deleted successfully' });
   } catch (error) {
-    res.status(500).json({ message: 'Error deleting property', error: error.message });
+    console.error(`deleteProperty failed for ${req.params.id}:`, error.message);
+    // Never leak SQL/FK internals (table + constraint names) to the client.
+    const safe = process.env.NODE_ENV === 'production'
+      ? 'Could not delete this property.'
+      : 'Error deleting property';
+    res.status(500).json({ message: safe });
   }
 };
 

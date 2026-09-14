@@ -22,6 +22,7 @@ router.post('/:id/sign', documentController.signDocument);
 router.post('/:id/generate-signing-link', documentController.generateSigningLink);
 router.post('/sign/:id/:token', signingRateLimiter, documentController.signDocumentByToken);
 router.get('/:id/audit-trail', documentController.getSignatureAuditTrail);
+router.get('/:id/download', documentController.downloadDocument);
 router.delete('/:id', documentController.deleteDocument);
 
 module.exports = router;

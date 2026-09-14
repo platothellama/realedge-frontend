@@ -13,7 +13,7 @@ exports.getWorkflows = async (req, res) => {
       include: [
         { model: Deal, as: 'deal', attributes: ['id', 'title'] },
         { model: Property, as: 'property', attributes: ['id', 'title'] },
-        { model: Lead, as: 'client', attributes: ['id', 'name', 'email', 'phone'] }
+        { model: User, as: 'client', attributes: ['id', 'name', 'email'] }
       ],
       order: [['createdAt', 'DESC']]
     });

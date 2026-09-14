@@ -52,9 +52,38 @@ exports.createPayment = async (req, res) => {
       referenceNumber, bankName, notes, status
     } = req.body;
 
-    const amountInUSD = currency === 'LBP' && exchangeRate 
-      ? Number(amount) / Number(exchangeRate) 
-      : Number(amount);
+    // PHASE 2 (D10/D11/D12/D13): USD reporting with payment-date rate;
+    // LBP without a valid rate is HELD (Pending, amountInUSD NULL, excluded
+    // from sums). Default status Pending. Overpayment rejected exact (D13).
+    const amt = Number(amount);
+    if (!Number.isFinite(amt) || amt < 0) {
+      return res.status(400).json({ message: 'Payment amount must be a non-negative number' });
+    }
+    const cur = currency || 'USD';
+    const rate = exchangeRate !== undefined && exchangeRate !== null && exchangeRate !== '' ? Number(exchangeRate) : null;
+
+    let heldForRate = false;
+    let amountInUSD = null;
+    if (cur === 'LBP') {
+      if (rate === null || !Number.isFinite(rate) || rate <= 0) {
+        heldForRate = true; // D11 hold: keep row, exclude from sums
+      } else {
+        amountInUSD = amt / rate;
+      }
+    } else {
+      amountInUSD = amt;
+    }
+
+    // D13 exact overpay guard (Confirmed totals only; held rows excluded).
+    if (dealId && amountInUSD !== null) {
+      const deal = await Deal.findByPk(dealId);
+      if (!deal) return res.status(404).json({ message: 'Deal not found' });
+      const confirmed = await Payment.sum('amountInUSD', { where: { dealId, status: 'Confirmed' } }) || 0;
+      const outstanding = Number(deal.finalPrice || 0) - Number(confirmed || 0);
+      if (amt > 0 && (Number(confirmed) + amountInUSD) - Number(deal.finalPrice || 0) > 0) {
+        return res.status(400).json({ message: `Overpayment rejected: outstanding is ${outstanding.toFixed(2)} (D13, exact)` });
+      }
+    }
 
     const payment = await Payment.create({
       dealId,
@@ -62,16 +91,17 @@ exports.createPayment = async (req, res) => {
       installmentNumber,
       payerName,
       payerPhone,
-      amount,
-      currency,
-      exchangeRate: exchangeRate || 1,
+      amount: amt,
+      currency: cur,
+      exchangeRate: rate,
       amountInUSD,
+      rateDate: paymentDate ? new Date(paymentDate) : new Date(),
       paymentDate,
       paymentMethod,
       referenceNumber,
       bankName,
-      notes,
-      status: status || 'Confirmed',
+      notes: heldForRate ? [notes, 'HELD: missing/invalid LBP rate (D11)'].filter(Boolean).join(' | ') : notes,
+      status: heldForRate ? 'Pending' : (status || 'Pending'),
       recordedByUserId: req.user.id
     });
 
@@ -92,15 +122,37 @@ exports.updatePayment = async (req, res) => {
     const payment = await Payment.findByPk(req.params.id);
     if (!payment) return res.status(404).json({ message: 'Payment not found' });
 
+    // PHASE 2 (D19): only Accountant/Admin can confirm (verify) payments.
+    if (req.body?.status === 'Confirmed' && payment.status !== 'Confirmed') {
+      const r = req.user?.role;
+      if (r !== 'Super Admin' && r !== 'Admin' && r !== 'Accountant') {
+        return res.status(403).json({ message: 'Only Accountant/Admin can confirm payments' });
+      }
+    }
+
     const updateData = { ...req.body };
 
-    if (updateData.amount || updateData.currency || updateData.exchangeRate) {
-      const amount = updateData.amount || payment.amount;
+    // PHASE 2 (D10/D11): guarded recompute — never divide by zero/missing.
+    if (updateData.amount !== undefined || updateData.currency !== undefined || updateData.exchangeRate !== undefined) {
+      const amount = updateData.amount !== undefined ? Number(updateData.amount) : Number(payment.amount);
       const currency = updateData.currency || payment.currency;
-      const exchangeRate = updateData.exchangeRate || payment.exchangeRate;
-      updateData.amountInUSD = currency === 'LBP' 
-        ? Number(amount) / Number(exchangeRate) 
-        : Number(amount);
+      const exchangeRate = updateData.exchangeRate !== undefined ? Number(updateData.exchangeRate) : Number(payment.exchangeRate);
+      if (!Number.isFinite(amount) || amount < 0) {
+        return res.status(400).json({ message: 'Payment amount must be a non-negative number' });
+      }
+      if (currency === 'LBP') {
+        if (!Number.isFinite(exchangeRate) || exchangeRate <= 0) {
+          updateData.amountInUSD = null; // held (D11)
+          updateData.status = 'Pending';
+        } else {
+          updateData.amountInUSD = amount / exchangeRate;
+          updateData.rateDate = updateData.paymentDate ? new Date(updateData.paymentDate) : (payment.rateDate || new Date());
+        }
+      } else {
+        updateData.amountInUSD = amount;
+      }
+      updateData.amount = amount;
+      updateData.exchangeRate = Number.isFinite(exchangeRate) ? exchangeRate : null;
     }
 
     await payment.update(updateData);
@@ -122,8 +174,10 @@ exports.deletePayment = async (req, res) => {
     const payment = await Payment.findByPk(req.params.id);
     if (!payment) return res.status(404).json({ message: 'Payment not found' });
 
-    await payment.destroy();
-    res.status(200).json({ message: 'Payment deleted successfully' });
+    // PHASE 2 (D21): payments are immutable — void via status
+    // (Rejected/Refunded), never hard-delete. Admin-only void preserved
+    // through updatePayment status change.
+    return res.status(403).json({ message: 'Payments cannot be deleted (void-only). Set status to Rejected/Refunded instead (D21).' });
   } catch (error) {
     res.status(500).json({ message: 'Error deleting payment', error: error.message });
   }
@@ -147,7 +201,10 @@ exports.getDealPaymentSummary = async (req, res) => {
       order: [['paymentDate', 'ASC']]
     });
 
-    const totalPaid = payments.reduce((sum, p) => sum + Number(p.amountInUSD || 0), 0);
+    // PHASE 2 (D12): only Confirmed with a converted amount counts as paid.
+    // Pending (incl. rate-held) is pipeline; Rejected/Refunded excluded.
+    const confirmed = payments.filter(p => p.status === 'Confirmed' && p.amountInUSD !== null);
+    const totalPaid = confirmed.reduce((sum, p) => sum + Number(p.amountInUSD || 0), 0);
     const finalPrice = Number(deal.finalPrice || 0);
     const remaining = finalPrice - totalPaid;
     const percentPaid = finalPrice > 0 ? (totalPaid / finalPrice) * 100 : 0;
@@ -164,11 +221,13 @@ exports.getDealPaymentSummary = async (req, res) => {
       payments,
       summary: {
         totalPaid,
-        totalPaidInOriginalCurrency: payments.reduce((sum, p) => sum + Number(p.amount || 0), 0),
+        totalPaidInOriginalCurrency: confirmed.reduce((sum, p) => sum + Number(p.amount || 0), 0),
         finalPrice,
         remaining,
         percentPaid: Math.round(percentPaid * 100) / 100,
         paymentCount: payments.length,
+        confirmedCount: confirmed.length,
+        pendingCount: payments.filter(p => p.status === 'Pending').length,
         currencies: [...new Set(payments.map(p => p.currency))]
       }
     });
@@ -280,7 +339,9 @@ exports.deletePaymentPlan = async (req, res) => {
 exports.getCashTracking = async (req, res) => {
   try {
     const { startDate, endDate, userId } = req.query;
-    const where = { paymentMethod: 'Cash' };
+    // PHASE 2 (D12/D19): cash tracking counts Confirmed only; non-privileged
+    // callers are scoped to their own records (no client-controlled userId).
+    const where = { paymentMethod: 'Cash', status: 'Confirmed' };
 
     if (startDate && endDate) {
       where.paymentDate = {
@@ -288,8 +349,11 @@ exports.getCashTracking = async (req, res) => {
       };
     }
 
-    if (userId) {
-      where.recordedByUserId = userId;
+    const callerRole = req.user?.role;
+    if (callerRole === 'Super Admin' || callerRole === 'Admin' || callerRole === 'Accountant') {
+      if (userId) where.recordedByUserId = userId;
+    } else {
+      where.recordedByUserId = req.user.id;
     }
 
     const cashPayments = await Payment.findAll({

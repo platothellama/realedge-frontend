@@ -30,9 +30,17 @@ exports.convertToDeal = async (req, res) => {
       return res.status(400).json({ message: 'Property is already sold and cannot be resold' });
     }
 
+    // PHASE 2 (D2/D3/D4): store the commission PERCENTAGE (no silent
+    // default, no amount). Basis is the final/negotiated price; money is
+    // resolved by commissionService at generate time.
     let commission = 0;
-    if (property.commissionPercentage > 0) {
-      commission = (Number(property.price) * property.commissionPercentage) / 100;
+    if (property.commissionType === 'percentage' && property.commissionValue != null) {
+      commission = Number(property.commissionValue);
+    } else if (property.commissionPercentage) {
+      commission = Number(property.commissionPercentage);
+    }
+    if (!Number.isFinite(commission) || commission < 0 || commission > 100) {
+      return res.status(400).json({ message: 'Property commission percentage must be between 0 and 100' });
     }
 
     const deal = await Deal.create({
@@ -66,10 +74,19 @@ exports.getAllLeads = async (req, res) => {
     const userRole = req.user.role;
     const userId = req.user.id;
 
-    // Filter logic: Admin/Super Admin see all, others see only assigned leads
+    // Filter logic (PHASE 2 D18/D19): Admin/Super Admin/Accountant see all;
+    // others see assigned leads plus leads of groups they belong to.
+    const { Op: OpLead } = require('sequelize');
     let whereClause = {};
-    if (userRole !== 'Super Admin' && userRole !== 'Admin') {
-      whereClause = { assignedToUserId: userId };
+    if (userRole !== 'Super Admin' && userRole !== 'Admin' && userRole !== 'Accountant') {
+      let memberGroupIds = [];
+      try {
+        const { UserGroup: UG } = require('../models/associations');
+        memberGroupIds = (await UG.findAll({ where: { userId }, attributes: ['groupId'] })).map(m => m.groupId);
+      } catch (_) {}
+      const or = [{ assignedToUserId: userId }];
+      if (memberGroupIds.length > 0) or.push({ groupId: { [OpLead.in]: memberGroupIds } });
+      whereClause = { [OpLead.or]: or };
     }
 
     const leads = await Lead.findAll({

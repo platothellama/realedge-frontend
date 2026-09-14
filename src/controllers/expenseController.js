@@ -27,7 +27,7 @@ exports.getExpenses = async (req, res) => {
 
 exports.createExpense = async (req, res) => {
   try {
-    const expense = await Expense.create(req.body);
+    const expense = await Expense.create({ ...req.body, createdByUserId: req.user ? req.user.id : null });
     res.status(201).json(expense);
   } catch (error) {
     res.status(500).json({ message: 'Error creating expense', error: error.message });
@@ -62,6 +62,12 @@ exports.deleteExpense = async (req, res) => {
   try {
     const expense = await Expense.findByPk(req.params.id);
     if (!expense) return res.status(404).json({ message: 'Expense not found' });
+
+    // PHASE 2 (D21): Paid/Approved expenses are immutable (void-only).
+    // Pending/Rejected may be deleted.
+    if (expense.status === 'Paid' || expense.status === 'Approved') {
+      return res.status(403).json({ message: `${expense.status} expenses cannot be deleted (void-only, D21).` });
+    }
 
     await expense.destroy();
     res.status(200).json({ message: 'Expense deleted' });

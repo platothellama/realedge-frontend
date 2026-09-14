@@ -24,7 +24,11 @@ exports.getCommissions = async (req, res) => {
   }
 };
 
+// PHASE 2 (D1): legacy Commission is FROZEN read-only. DealCommission is
+// canonical. Reads (getCommissions, getCommissionStats, status updates for
+// historical rows) remain; new calculations/creations are gone (410).
 exports.calculateCommission = async (req, res) => {
+  return res.status(410).json({ message: 'Legacy commission calculation removed. Use DealCommission via /api/deals/:id/calculate|generate-commission (D1).' });
   try {
     const { 
       dealId, 
@@ -80,6 +84,7 @@ exports.calculateCommission = async (req, res) => {
 };
 
 exports.createCommission = async (req, res) => {
+  return res.status(410).json({ message: 'Legacy commission creation removed. Use DealCommission via /api/deals/:id/calculate|generate-commission (D1).' });
   try {
     const { 
       dealId, 

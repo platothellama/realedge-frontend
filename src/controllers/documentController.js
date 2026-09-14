@@ -61,6 +61,15 @@ exports.uploadDocument = async (req, res) => {
       return res.status(400).json({ message: 'No file uploaded' });
     }
 
+    // PHASE 1: content must match its extension (blocks renamed executables);
+    // display name sanitized (storage key is always a server UUID).
+    const uploadMw = require('../middleware/uploadMiddleware');
+    try {
+      uploadMw.assertFileMagic(req.file.buffer, req.file.originalname);
+    } catch (magicErr) {
+      return res.status(400).json({ status: 'fail', message: magicErr.message });
+    }
+    const safeFileName = uploadMw.sanitizeDisplayName(req.file.originalname);
     const { title, type, propertyId, dealId, isDigitalSignatureEnabled, visibility, signerClient, signerAgent, signerOwner, signatureStatus, userId: connectedUserId } = req.body;
     const userId = req.user.id;
 
@@ -93,7 +102,7 @@ exports.uploadDocument = async (req, res) => {
     await DocumentVersion.create({
       versionNumber: 1,
       fileUrl,
-      fileName: req.file.originalname,
+      fileName: safeFileName,
       fileSize: req.file.size,
       documentId: document.id,
       uploadedByUserId: userId
@@ -103,7 +112,9 @@ exports.uploadDocument = async (req, res) => {
     const contentHash = generateDocumentHash(req.file.buffer);
     
     // Calculate retention period
-    const retentionPeriodDays = req.body.retentionPeriodDays || 2555;
+    // PHASE 2 (D21): 10-year default retention.
+    const retentionPeriodDays =
+req.body.retentionPeriodDays || 3650;
     const retentionExpiresAt = new Date();
     retentionExpiresAt.setDate(retentionExpiresAt.getDate() + retentionPeriodDays);
 
@@ -157,6 +168,14 @@ exports.addVersion = async (req, res) => {
     const document = await Document.findByPk(req.params.id);
     if (!document) return res.status(404).json({ message: 'Document not found' });
 
+    // PHASE 1: same content + filename guarantees as the initial upload.
+    const uploadMw = require('../middleware/uploadMiddleware');
+    try {
+      uploadMw.assertFileMagic(req.file.buffer, req.file.originalname);
+    } catch (magicErr) {
+      return res.status(400).json({ status: 'fail', message: magicErr.message });
+    }
+
     const newVersionNumber = document.currentVersion + 1;
     const userId = req.user.id;
 
@@ -171,7 +190,7 @@ exports.addVersion = async (req, res) => {
     await DocumentVersion.create({
       versionNumber: newVersionNumber,
       fileUrl: versionFileUrl,
-      fileName: req.file.originalname,
+      fileName: uploadMw.sanitizeDisplayName(req.file.originalname),
       fileSize: req.file.size,
       documentId: document.id,
       uploadedByUserId: userId,
@@ -511,13 +530,58 @@ exports.signDocumentByToken = async (req, res) => {
   }
 };
 
+// PHASE 2 (D22): authenticated signed download (24h expiry) for private
+// docs. Photos/property images stay public; confidential document bytes go
+// through this endpoint. Dual-read transition: stored public URLs keep
+// resolving until the bucket cutover (ops runbook).
+exports.downloadDocument = async (req, res) => {
+  try {
+    const document = await Document.findByPk(req.params.id);
+    if (!document) return res.status(404).json({ message: 'Document not found' });
+    const role = req.user?.role;
+    const uid = req.user?.id;
+    const privileged = role === 'Super Admin' || role === 'Admin';
+    if (!privileged && document.uploadedByUserId !== uid && document.userId !== uid) {
+      return res.status(403).json({ message: 'Access denied' });
+    }
+    const version = await DocumentVersion.findOne({
+      where: { documentId: document.id },
+      order: [['versionNumber', 'DESC']]
+    });
+    const fileUrl = version?.fileUrl;
+    const { keyFromPublicUrl, createSignedUrl } = require('../services/supabaseStorageService');
+    const key = keyFromPublicUrl(fileUrl);
+    if (!key) return res.status(404).json({ message: 'No cloud object for this document (legacy local file)' });
+    const signedUrl = await createSignedUrl(key, 86400);
+    res.status(200).json({ url: signedUrl, expiresInSeconds: 86400 });
+  } catch (error) {
+    res.status(500).json({ message: 'Error generating download URL', error: error.message });
+  }
+};
+
 exports.deleteDocument = async (req, res) => {
   try {
     const document = await Document.findByPk(req.params.id);
     if (!document) return res.status(404).json({ message: 'Document not found' });
 
+    // PHASE 2 (D21): signed documents are immutable — never hard-delete
+    // (10y retention). Unsigned drafts may be deleted.
+    if (document.status === 'Signed' || document.signatureStatus === 'signed' || document.signedAt) {
+      return res.status(403).json({ message: 'Signed documents cannot be deleted (10y retention, D21). Archive instead.' });
+    }
+
     const docTitle = document.title;
     const userId = req.user.id;
+
+    // PHASE 1: remove the versioned storage objects best-effort. The DB
+    // delete below still succeeds if storage is unreachable (logged).
+    try {
+      const { deleteObject, keyFromPublicUrl } = require('../services/supabaseStorageService');
+      const versions = await DocumentVersion.findAll({ where: { documentId: document.id } });
+      await Promise.all(versions.map((v) => deleteObject(keyFromPublicUrl(v.fileUrl))));
+    } catch (storageErr) {
+      console.error(`Document storage cleanup skipped: ${storageErr.message}`);
+    }
 
     // In a real app, we'd also delete files from disk
     await document.destroy();

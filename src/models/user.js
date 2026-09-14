@@ -65,6 +65,12 @@ const User = sequelize.define('User', {
     defaultValue: true,
     select: false
   },
+  passwordChangedAt: {
+    // PHASE 2 (D24): any password/role/active change bumps this; tokens
+    // issued before it (iat) are rejected in `protect`.
+    type: DataTypes.DATE,
+    allowNull: true
+  },
   lastLogin: {
     type: DataTypes.DATE
   }
@@ -81,6 +87,8 @@ const User = sequelize.define('User', {
       if (user.changed('password')) {
         const salt = await bcrypt.genSalt(10);
         user.password = await bcrypt.hash(user.password, salt);
+        // PHASE 2 (D24): password change invalidates existing sessions.
+        user.passwordChangedAt = new Date();
       }
     }
   }

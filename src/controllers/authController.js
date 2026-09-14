@@ -5,8 +5,9 @@ const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 
 const signToken = (id) => {
+  // PHASE 2 (D24): approved 7-day lifetime; no refresh table yet.
   return jwt.sign({ id }, process.env.JWT_SECRET, {
-    expiresIn: process.env.JWT_EXPIRE
+    expiresIn: process.env.JWT_EXPIRE || '7d'
   });
 };
 
@@ -116,6 +117,10 @@ exports.googleLogin = async (req, res) => {
         role: 'Agent'
       });
     } else {
+      // PHASE 1: Google users respect the active flag like password users.
+      if (user.active === false) {
+        return res.status(401).json({ status: 'fail', message: 'This account has been deactivated.' });
+      }
       // Update existing user with Google ID if not present
       if (!user.googleId) {
         user.googleId = googleId;
@@ -142,7 +147,16 @@ exports.forgotPassword = async (req, res) => {
 
     await user.save({ validate: false });
 
-    // In production, send email here. For now, return token
+    // In production, the token is emailed (never returned). In
+    // non-production it is returned for local testing convenience.
+    // AUDIT-2026-09: the raw reset token is a live credential — returning
+    // it unconditionally lets anyone with a victim's email capture it.
+    if (process.env.NODE_ENV === 'production') {
+      return res.status(200).json({
+        status: 'success',
+        message: 'If an account exists for this email, a reset link has been sent.'
+      });
+    }
     res.status(200).json({
       status: 'success',
       message: 'Token sent to email! (In dev, see token below)',
@@ -169,7 +183,10 @@ exports.getLoginLogs = async (req, res) => {
 exports.getMe = async (req, res) => {
   try {
     const user = await User.findByPk(req.user.id, {
-      attributes: { exclude: ['password'] }
+      // AUDIT-2026-09: never expose password hashes, 2FA secrets, or
+      // password-reset material to the client (even the account owner —
+      // the client has no legitimate use for these values).
+      attributes: { exclude: ['password', 'twoFactorSecret', 'passwordResetToken', 'passwordResetExpires'] }
     });
     res.status(200).json({ status: 'success', data: { user } });
   } catch (error) {

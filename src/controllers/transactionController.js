@@ -17,7 +17,7 @@ exports.getTransactions = async (req, res) => {
       include: [
         { model: Property, as: 'property', attributes: ['id', 'title'] },
         { model: Deal, as: 'deal', attributes: ['id', 'title'] },
-        { model: User, as: 'user', attributes: ['id', 'name'] }
+        { model: User, as: 'creator', attributes: ['id', 'name'] }
       ],
       order: [['date', 'DESC']]
     });
@@ -36,16 +36,23 @@ exports.getFinancialSummary = async (req, res) => {
 
     const where = { date: { [Op.between]: [start, end] } };
 
+    // PHASE 2 (D25): finance summary counts completed only (cancelled/
+    // pending excluded). Currency is USD-reporting (D10); LBP rows need a
+    // converted amountInUSD equivalent in a follow-up migration — for now
+    // completed USD rows are authoritative.
+    const doneWhere = { status: 'completed' };
     const [income, expenses, incomeByCategory, expensesByCategory, monthlyData] = await Promise.all([
-      Transaction.sum('amount', { where: { type: 'income', ...where } }),
-      Transaction.sum('amount', { where: { type: 'expense', ...where } }),
+      Transaction.sum('amount', { where: { type: 'income', status: 'completed', ...where } }),
+      Transaction.sum('amount', { where: { type: 'expense', status: 'completed', ...where } }),
       Transaction.findAll({
         where: { type: 'income', ...where },
-        attributes: ['category', [require('sequelize').fn('SUM', require('sequelize').col('amount')), 'total']]
+        attributes: ['category', [require('sequelize').fn('SUM', require('sequelize').col('amount')), 'total']],
+        group: ['category']
       }),
       Transaction.findAll({
         where: { type: 'expense', ...where },
-        attributes: ['category', [require('sequelize').fn('SUM', require('sequelize').col('amount')), 'total']]
+        attributes: ['category', [require('sequelize').fn('SUM', require('sequelize').col('amount')), 'total']],
+        group: ['category']
       }),
       Transaction.findAll({
         where,
@@ -95,13 +102,14 @@ exports.updateTransaction = async (req, res) => {
   }
 };
 
+// PHASE 2 (D21): transactions are immutable — void via status cancelled,
+// never hard-delete.
 exports.deleteTransaction = async (req, res) => {
   try {
     const transaction = await Transaction.findByPk(req.params.id);
     if (!transaction) return res.status(404).json({ message: 'Transaction not found' });
 
-    await transaction.destroy();
-    res.status(200).json({ message: 'Transaction deleted' });
+    return res.status(403).json({ message: 'Transactions cannot be deleted (void-only). Set status to cancelled instead (D21).' });
   } catch (error) {
     res.status(500).json({ message: 'Error deleting transaction', error: error.message });
   }

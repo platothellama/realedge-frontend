@@ -121,12 +121,19 @@ exports.createWebsite = async (req, res) => {
       return res.status(400).json({ message: 'Slug already exists' });
     }
 
+    // PHASE 2 (D23): headerCode/footerCode removed from the API surface
+    // (stored-JS reservoir). Never accept them on write; columns dropped in
+    // a later migration. Existing values are archived, never served.
+    const { headerCode: _hc, footerCode: _fc, ...restBody } = req.body;
     const website = await Website.create({
       name,
       slug,
       description,
       status: 'draft',
-      ...req.body
+      ...restBody,
+      headerCode: null,
+      footerCode: null,
+      createdByUserId: req.user ? req.user.id : null
     });
 
     if (template) {
@@ -146,8 +153,13 @@ exports.updateWebsite = async (req, res) => {
     const website = await Website.findByPk(req.params.id);
     if (!website) return res.status(404).json({ message: 'Website not found' });
     
-    await website.update(req.body);
-    res.status(200).json(website);
+    // PHASE 2 (D23): strip custom code on update as well.
+    const { headerCode: _hc2, footerCode: _fc2, ...updateBody } = req.body;
+    await website.update({ ...updateBody, headerCode: null, footerCode: null });
+    const plain = website.toJSON();
+    delete plain.headerCode;
+    delete plain.footerCode;
+    res.status(200).json(plain);
   } catch (error) {
     res.status(500).json({ message: 'Error updating website', error: error.message });
   }
@@ -190,8 +202,13 @@ exports.getWebsiteBySlug = async (req, res) => {
     if (!website) {
       return res.status(404).json({ message: 'Website not found' });
     }
-    
-    res.status(200).json(website);
+
+    // PHASE 2 (D23): never serve custom code in public JSON.
+    const plain = website.toJSON();
+    delete plain.headerCode;
+    delete plain.footerCode;
+
+    res.status(200).json(plain);
   } catch (error) {
     res.status(500).json({ message: 'Error fetching website', error: error.message });
   }

@@ -1,0 +1,15 @@
+# PHASE 1 (production hardening): never bake secrets, VCS metadata,
+// dependencies, or ephemeral uploads into the backend image.
+.env
+.env.*
+!.env.example
+.git
+.gitignore
+node_modules/
+npm-debug.log
+uploads/
+coverage/
+*.md
+.dockerignore
+Dockerfile*
+docker-compose*

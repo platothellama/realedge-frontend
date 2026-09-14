@@ -283,27 +283,45 @@ exports.getStats = async (req, res) => {
       totalUsers = await User.count({ where: { active: true } });
     }
 
-    const totalRevenue = userIsSuperAdmin
-      ? (await Deal.sum('commission', { where: { dealStage: 'Closed' } }) || 0)
-      : (await Deal.sum('commission', { where: { ...dealWhere, dealStage: 'Closed' } }) || 0);
-    
-    const totalExpenses = userIsSuperAdmin
-      ? (await Expense.sum('amount') || 0)
-      : (await Expense.sum('amount', { where: expenseWhere }) || 0);
+    // PHASE 2 (D8/D15/D16): revenue = computed gross SUM(finalPrice x
+    // commission% / 100) on Closed (Deal.commission is a % per D2); profit =
+    // revenue − Paid-only expenses (D15, global scope per D15b); period =
+    // month of closedAt (D9/D16). History frozen (D26): formulas apply to
+    // reads prospectively; no backfill of money values.
+    const grossOf = (d) => {
+      const price = Number(d.finalPrice || 0);
+      const pct = Number(d.commission || 0);
+      if (!Number.isFinite(price) || !Number.isFinite(pct)) return 0;
+      return price * pct / 100;
+    };
+    const closedDeals = await Deal.findAll({
+      where: userIsSuperAdmin ? { dealStage: 'Closed' } : { ...dealWhere, dealStage: 'Closed' },
+      attributes: ['finalPrice', 'commission', 'closedAt']
+    });
+    const totalRevenue = closedDeals.reduce((s, d) => s + grossOf(d), 0);
 
-    const monthlyStats = await Deal.findAll({
+    const totalExpenses = await Expense.sum('amount', { where: { status: 'Paid' } }) || 0;
+
+    const monthlyClosed = await Deal.findAll({
       where: userIsSuperAdmin
         ? { dealStage: 'Closed', closedAt: { [Op.ne]: null } }
         : { ...dealWhere, dealStage: 'Closed', closedAt: { [Op.ne]: null } },
-      attributes: [
-        [sequelize.fn('DATE_FORMAT', sequelize.col('closedAt'), '%Y-%m'), 'month'],
-        [sequelize.fn('SUM', sequelize.col('commission')), 'revenue']
-      ],
-      group: [sequelize.fn('DATE_FORMAT', sequelize.col('closedAt'), '%Y-%m')],
-      order: [[sequelize.fn('DATE_FORMAT', sequelize.col('closedAt'), '%Y-%m'), 'DESC']],
-      limit: 6,
+      attributes: ['finalPrice', 'commission', 'closedAt'],
+      order: [['closedAt', 'DESC']],
+      limit: 500,
       raw: true
     });
+    const byMonth = new Map();
+    for (const d of monthlyClosed) {
+      const dt = new Date(d.closedAt);
+      if (Number.isNaN(dt.getTime())) continue;
+      const key = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}`;
+      byMonth.set(key, (byMonth.get(key) || 0) + grossOf(d));
+    }
+    const monthlyStats = [...byMonth.entries()]
+      .sort((a, b) => (a[0] < b[0] ? 1 : -1))
+      .slice(0, 6)
+      .map(([month, revenue]) => ({ month, revenue }));
 
     const topAgents = userIsSuperAdmin ? await User.findAll({
       where: { role: { [Op.in]: ['Broker', 'Agent'] }, active: true },
@@ -311,6 +329,11 @@ exports.getStats = async (req, res) => {
       order: [['createdAt', 'ASC']],
       limit: 5
     }) : [];
+
+    // PHASE 2 (D8): this-month revenue on the same computed-gross basis.
+    thisMonthRevenue = closedDeals
+      .filter(d => d.closedAt && new Date(d.closedAt) >= startOfMonth)
+      .reduce((s, d) => s + grossOf(d), 0);
 
     const stats = {
       isSuperAdmin: userIsSuperAdmin,
