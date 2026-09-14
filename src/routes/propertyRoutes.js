@@ -4,17 +4,27 @@ const propertyController = require('../controllers/propertyController');
 const { protect, restrictTo } = require('../middleware/authMiddleware');
 const upload = require('../middleware/uploadMiddleware');
 
-// Public upload route for images (placed BEFORE any dynamic routes)
-router.post('/upload', protect, upload.single('image'), (req, res) => {
+// Property image upload (placed BEFORE any dynamic routes)
+// Stores file in Supabase Storage (persistent) and returns a public URL.
+router.post('/upload', protect, upload.single('image'), async (req, res) => {
   console.log('--- Upload Route Hit ---');
   if (!req.file) {
     return res.status(400).json({ status: 'fail', message: 'No file uploaded' });
   }
-  const protocol = req.protocol;
-  const host = req.get('host');
-  const imageUrl = `${protocol}://${host}/uploads/${req.file.filename}`;
-  console.log('File uploaded:', imageUrl);
-  res.status(200).json({ status: 'success', url: imageUrl });
+  try {
+    const { uploadBuffer } = require('../services/supabaseStorageService');
+    const { url, path: storagePath } = await uploadBuffer(
+      req.file.buffer,
+      req.file.originalname,
+      req.file.mimetype,
+      'properties'
+    );
+    console.log('File uploaded:', url);
+    res.status(200).json({ status: 'success', url, path: storagePath });
+  } catch (err) {
+    console.error('Property image upload failed:', err.message);
+    res.status(500).json({ status: 'fail', message: 'Upload failed', error: err.message });
+  }
 });
 
 router.use(protect);

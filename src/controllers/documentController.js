@@ -1,7 +1,5 @@
 const { Document, DocumentVersion, User, DocumentSignature, AuditLog } = require('../models/associations');
 const notificationController = require('./notificationController');
-const path = require('path');
-const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
 const crypto = require('crypto');
 
@@ -82,19 +80,27 @@ exports.uploadDocument = async (req, res) => {
       userId: connectedUserId || null
     });
 
+    // Upload file to Supabase Storage (persistent) and store the public URL
+    const { uploadBuffer } = require('../services/supabaseStorageService');
+    const { url: fileUrl } = await uploadBuffer(
+      req.file.buffer,
+      req.file.originalname,
+      req.file.mimetype,
+      'documents'
+    );
+
     // Create the first version
     await DocumentVersion.create({
       versionNumber: 1,
-      fileUrl: req.file.filename,
+      fileUrl,
       fileName: req.file.originalname,
       fileSize: req.file.size,
       documentId: document.id,
       uploadedByUserId: userId
     });
 
-    // Generate document content hash for tamper detection
-    const fileBuffer = fs.readFileSync(req.file.path);
-    const contentHash = generateDocumentHash(fileBuffer);
+    // Generate document content hash for tamper detection (from memory buffer)
+    const contentHash = generateDocumentHash(req.file.buffer);
     
     // Calculate retention period
     const retentionPeriodDays = req.body.retentionPeriodDays || 2555;
@@ -154,9 +160,17 @@ exports.addVersion = async (req, res) => {
     const newVersionNumber = document.currentVersion + 1;
     const userId = req.user.id;
 
+    const { uploadBuffer } = require('../services/supabaseStorageService');
+    const { url: versionFileUrl } = await uploadBuffer(
+      req.file.buffer,
+      req.file.originalname,
+      req.file.mimetype,
+      'documents'
+    );
+
     await DocumentVersion.create({
       versionNumber: newVersionNumber,
-      fileUrl: req.file.filename,
+      fileUrl: versionFileUrl,
       fileName: req.file.originalname,
       fileSize: req.file.size,
       documentId: document.id,
@@ -428,11 +442,13 @@ exports.signDocumentByToken = async (req, res) => {
     
     let tamperCheckPassed = false;
     if (version && version.fileUrl) {
-      const filePath = path.join(__dirname, '../../uploads', version.fileUrl);
-      if (fs.existsSync(filePath)) {
-        const fileBuffer = fs.readFileSync(filePath);
-        const currentHash = generateDocumentHash(fileBuffer);
-        tamperCheckPassed = currentHash === document.documentContentHash;
+      const { isCloudUrl, fetchBufferForHash } = require('../services/supabaseStorageService');
+      // Legacy local filenames (no http) have no backing file; only verify cloud URLs.
+      if (isCloudUrl(version.fileUrl)) {
+        const remoteBuffer = await fetchBufferForHash(version.fileUrl);
+        if (remoteBuffer) {
+          tamperCheckPassed = generateDocumentHash(remoteBuffer) === document.documentContentHash;
+        }
       }
     }
 
@@ -646,11 +662,13 @@ exports.processPublicSignature = async (req, res) => {
     
     let tamperCheckPassed = false;
     if (version && version.fileUrl) {
-      const filePath = path.join(__dirname, '../../uploads', version.fileUrl);
-      if (fs.existsSync(filePath)) {
-        const fileBuffer = fs.readFileSync(filePath);
-        const currentHash = generateDocumentHash(fileBuffer);
-        tamperCheckPassed = currentHash === document.documentContentHash;
+      const { isCloudUrl, fetchBufferForHash } = require('../services/supabaseStorageService');
+      // Legacy local filenames (no http) have no backing file; only verify cloud URLs.
+      if (isCloudUrl(version.fileUrl)) {
+        const remoteBuffer = await fetchBufferForHash(version.fileUrl);
+        if (remoteBuffer) {
+          tamperCheckPassed = generateDocumentHash(remoteBuffer) === document.documentContentHash;
+        }
       }
     }
 

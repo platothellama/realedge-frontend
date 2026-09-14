@@ -76,15 +76,24 @@ app.use('/api/payments', paymentRoutes);
 app.use('/api/sign', publicDocumentRoutes);
 app.use('/api/commission-settings', commissionSettingsRoutes);
 
-// Direct Upload Route (Fallback)
-app.post('/api/properties/upload', protect, upload.single('image'), (req, res) => {
+// Direct Upload Route (Fallback) - Supabase persistent storage
+app.post('/api/properties/upload', protect, upload.single('image'), async (req, res) => {
   if (!req.file) {
     return res.status(400).json({ status: 'fail', message: 'No file uploaded' });
   }
-  const protocol = req.protocol;
-  const host = req.get('host');
-  const imageUrl = `${protocol}://${host}/uploads/${req.file.filename}`;
-  res.status(200).json({ status: 'success', url: imageUrl });
+  try {
+    const { uploadBuffer } = require('./services/supabaseStorageService');
+    const { url, path: storagePath } = await uploadBuffer(
+      req.file.buffer,
+      req.file.originalname,
+      req.file.mimetype,
+      'properties'
+    );
+    res.status(200).json({ status: 'success', url, path: storagePath });
+  } catch (err) {
+    console.error('Property image upload failed:', err.message);
+    res.status(500).json({ status: 'fail', message: 'Upload failed', error: err.message });
+  }
 });
 
 // Health Check
