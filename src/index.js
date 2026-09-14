@@ -45,22 +45,9 @@ const PORT = process.env.PORT || 8000;
 // PHASE 1 (production hardening): secure defaults without changing API behavior.
 app.set('trust proxy', 1); // Render/Heroku-style proxies: correct req.ip for throttling/logs.
 
-// CORS allowlist: comma-separated frontend origins via FRONTEND_URL.
-// Dev default keeps localhost SPA working; production MUST set FRONTEND_URL.
-const allowedOrigins = (process.env.FRONTEND_URL || '')
-  .split(',')
-  .map((o) => o.trim())
-  .filter(Boolean);
-if (process.env.NODE_ENV !== 'production' && allowedOrigins.length === 0) {
-  allowedOrigins.push('http://localhost:4200', 'http://localhost:80');
-}
-app.use(cors({
-  origin: (origin, cb) => {
-    if (!origin) return cb(null, true); // curl/health checks, same-origin
-    if (allowedOrigins.includes(origin)) return cb(null, true);
-    return cb(new Error('CORS origin not allowed'));
-  }
-}));
+// TEMP-DEV: allow all origins. TODO: re-lock to FRONTEND_URL allowlist before prod.
+// app.use(cors()) reflects any Origin — do NOT ship this to production with credentials.
+app.use(cors());
 
 // Security headers. API serves JSON (plus the SPA bundle in production),
 // so keep policies permissive for cross-origin reads:
