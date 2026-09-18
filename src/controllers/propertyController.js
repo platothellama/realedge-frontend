@@ -47,6 +47,30 @@ const validateBalconies = (balconies) => {
   return null;
 };
 
+// Terrace / cellar sizes only apply when the flag is set (frontend enables
+// the size input only then). Sizes must be numbers >= 0; without the flag
+// the size is normalized to NULL so no stale 0 is stored.
+const validateOutdoorSize = (value, label) => {
+  if (value === undefined || value === null || value === '') return null;
+  const n = Number(value);
+  if (!Number.isFinite(n) || n < 0) return `${label} must be a number >= 0`;
+  return null;
+};
+const normalizeOutdoorSizes = (body, effective = {}) => {
+  const hasTerrace = body.hasTerrace !== undefined ? !!body.hasTerrace : !!effective.hasTerrace;
+  const hasCellar = body.hasCellar !== undefined ? !!body.hasCellar : !!effective.hasCellar;
+  if (!hasTerrace) {
+    body.terraceSize = null;
+  } else if (body.terraceSize === '' || body.terraceSize === undefined) {
+    if (body.hasTerrace !== undefined && body.terraceSize === '') body.terraceSize = null;
+  }
+  if (!hasCellar) {
+    body.cellarSize = null;
+  } else if (body.cellarSize === '' || body.cellarSize === undefined) {
+    if (body.hasCellar !== undefined && body.cellarSize === '') body.cellarSize = null;
+  }
+};
+
 // Optional project grouping: accepts `projectId` (UUID or ''/null to ungroup)
 // and `newProject` ({ name, ... }) for on-the-fly creation from the listing form.
 const resolveProjectId = async (body) => {
@@ -233,6 +257,11 @@ exports.createProperty = async (req, res) => {
     if (bedroomError) return res.status(400).json({ message: bedroomError });
     const balconiesError = validateBalconies(req.body.balconies);
     if (balconiesError) return res.status(400).json({ message: balconiesError });
+    const terraceError = validateOutdoorSize(req.body.hasTerrace ? req.body.terraceSize : null, 'Terrace size');
+    if (terraceError) return res.status(400).json({ message: terraceError });
+    const cellarError = validateOutdoorSize(req.body.hasCellar ? req.body.cellarSize : null, 'Cellar size');
+    if (cellarError) return res.status(400).json({ message: cellarError });
+    normalizeOutdoorSizes(req.body);
     const { newSeller, sellerId, newProject, projectId, ...propertyData } = req.body;
 
     // QA 2026-09-18: PK, timestamps, server-computed sale figures and
@@ -334,6 +363,19 @@ exports.updateProperty = async (req, res) => {
       propertyData.balconies !== undefined ? propertyData.balconies : undefined
     );
     if (balconiesError) return res.status(400).json({ message: balconiesError });
+    const effectiveHasTerrace = propertyData.hasTerrace !== undefined ? !!propertyData.hasTerrace : !!property.hasTerrace;
+    const effectiveHasCellar = propertyData.hasCellar !== undefined ? !!propertyData.hasCellar : !!property.hasCellar;
+    const terraceError = validateOutdoorSize(
+      effectiveHasTerrace ? (propertyData.terraceSize !== undefined ? propertyData.terraceSize : property.terraceSize) : null,
+      'Terrace size'
+    );
+    if (terraceError) return res.status(400).json({ message: terraceError });
+    const cellarError = validateOutdoorSize(
+      effectiveHasCellar ? (propertyData.cellarSize !== undefined ? propertyData.cellarSize : property.cellarSize) : null,
+      'Cellar size'
+    );
+    if (cellarError) return res.status(400).json({ message: cellarError });
+    normalizeOutdoorSizes(propertyData, { hasTerrace: effectiveHasTerrace, hasCellar: effectiveHasCellar });
 
     // QA 2026-09-18: same server-managed fields as create (the Sold flip
     // below recomputes soldPrice/soldAt/soldTo from the closed deal).
