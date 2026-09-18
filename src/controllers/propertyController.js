@@ -112,11 +112,34 @@ exports.getAllProperties = async (req, res) => {
     const minBedrooms = req.query.minBedrooms ? parseInt(req.query.minBedrooms) : null;
     const maxBedrooms = req.query.maxBedrooms ? parseInt(req.query.maxBedrooms) : null;
     const minBathrooms = req.query.minBathrooms ? parseInt(req.query.minBathrooms) : null;
+    const maxBathrooms = req.query.maxBathrooms ? parseInt(req.query.maxBathrooms) : null;
     const minBalconies = req.query.minBalconies ? parseInt(req.query.minBalconies) : null;
+    const maxBalconies = req.query.maxBalconies ? parseInt(req.query.maxBalconies) : null;
+    const rawMinParking = req.query.minParking ?? req.query.minParkingSpaces;
+    const rawMaxParking = req.query.maxParking ?? req.query.maxParkingSpaces;
+    const minParking = rawMinParking !== undefined && rawMinParking !== '' ? parseInt(rawMinParking) : null;
+    const maxParking = rawMaxParking !== undefined && rawMaxParking !== '' ? parseInt(rawMaxParking) : null;
+    const minFloor = req.query.minFloor !== undefined && req.query.minFloor !== '' ? parseInt(req.query.minFloor) : null;
+    const maxFloor = req.query.maxFloor !== undefined && req.query.maxFloor !== '' ? parseInt(req.query.maxFloor) : null;
+    const minYearBuilt = req.query.minYearBuilt ? parseInt(req.query.minYearBuilt) : null;
+    const maxYearBuilt = req.query.maxYearBuilt ? parseInt(req.query.maxYearBuilt) : null;
+    const minLotSize = req.query.minLotSize ? parseFloat(req.query.minLotSize) : null;
+    const maxLotSize = req.query.maxLotSize ? parseFloat(req.query.maxLotSize) : null;
+    const minMasterBedrooms = req.query.minMasterBedrooms ? parseInt(req.query.minMasterBedrooms) : null;
+    const condition = req.query.condition;
+    const country = req.query.country;
+    const hasTerrace = req.query.hasTerrace;
+    const hasCellar = req.query.hasCellar;
+    const feature = req.query.feature || req.query.features;
+    const assignedToUserId = req.query.assignedToUserId;
+    const assignedToGroupId = req.query.assignedToGroupId;
+    const sellerId = req.query.sellerId;
     const minArea = req.query.minArea ? parseFloat(req.query.minArea) : null;
     const maxArea = req.query.maxArea ? parseFloat(req.query.maxArea) : null;
     const city = req.query.city;
     const projectId = req.query.projectId;
+    const sortBy = req.query.sortBy;
+    const sortDir = String(req.query.sortDir || 'DESC').toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
 
     const where = {};
     
@@ -147,40 +170,122 @@ exports.getAllProperties = async (req, res) => {
       where.listingType = listingType;
     }
     
-    if (minPrice) {
+    if (Number.isFinite(minPrice)) {
       where.price = { ...where.price, [Op.gte]: minPrice };
     }
-    
-    if (maxPrice) {
+
+    if (Number.isFinite(maxPrice)) {
       where.price = { ...where.price, [Op.lte]: maxPrice };
     }
-    
-    if (minBedrooms) {
+
+    if (Number.isInteger(minBedrooms)) {
       where.bedrooms = { ...where.bedrooms, [Op.gte]: minBedrooms };
     }
-    
-    if (maxBedrooms) {
+
+    if (Number.isInteger(maxBedrooms)) {
       where.bedrooms = { ...where.bedrooms, [Op.lte]: maxBedrooms };
     }
     
-    if (minBathrooms) {
-      where.bathrooms = { [Op.gte]: minBathrooms };
+    if (Number.isInteger(minBathrooms)) {
+      where.bathrooms = { ...where.bathrooms, [Op.gte]: minBathrooms };
+    }
+
+    if (Number.isInteger(maxBathrooms)) {
+      where.bathrooms = { ...where.bathrooms, [Op.lte]: maxBathrooms };
     }
 
     if (Number.isInteger(minBalconies)) {
-      where.balconies = { [Op.gte]: minBalconies };
+      where.balconies = { ...where.balconies, [Op.gte]: minBalconies };
     }
-    
-    if (minArea) {
-      where.area = { [Op.gte]: minArea };
+
+    if (Number.isInteger(maxBalconies)) {
+      where.balconies = { ...where.balconies, [Op.lte]: maxBalconies };
     }
-    
-    if (maxArea) {
+
+    if (Number.isInteger(minParking)) {
+      where.parkingSpaces = { ...where.parkingSpaces, [Op.gte]: minParking };
+    }
+
+    if (Number.isInteger(maxParking)) {
+      where.parkingSpaces = { ...where.parkingSpaces, [Op.lte]: maxParking };
+    }
+
+    if (Number.isInteger(minFloor)) {
+      where.floor = { ...where.floor, [Op.gte]: minFloor };
+    }
+
+    if (Number.isInteger(maxFloor)) {
+      where.floor = { ...where.floor, [Op.lte]: maxFloor };
+    }
+
+    if (Number.isInteger(minYearBuilt)) {
+      where.yearBuilt = { ...where.yearBuilt, [Op.gte]: minYearBuilt };
+    }
+
+    if (Number.isInteger(maxYearBuilt)) {
+      where.yearBuilt = { ...where.yearBuilt, [Op.lte]: maxYearBuilt };
+    }
+
+    if (Number.isFinite(minLotSize)) {
+      where.lotSize = { ...where.lotSize, [Op.gte]: minLotSize };
+    }
+
+    if (Number.isFinite(maxLotSize)) {
+      where.lotSize = { ...where.lotSize, [Op.lte]: maxLotSize };
+    }
+
+    if (Number.isInteger(minMasterBedrooms)) {
+      where.masterBedrooms = { [Op.gte]: minMasterBedrooms };
+    }
+
+    if (condition && condition !== 'All' && ['Used', 'New'].includes(condition)) {
+      where.condition = condition;
+    }
+
+    if (hasTerrace === 'true' || hasTerrace === true || hasTerrace === '1') {
+      where.hasTerrace = true;
+    } else if (hasTerrace === 'false' || hasTerrace === '0') {
+      where.hasTerrace = false;
+    }
+
+    if (hasCellar === 'true' || hasCellar === true || hasCellar === '1') {
+      where.hasCellar = true;
+    } else if (hasCellar === 'false' || hasCellar === '0') {
+      where.hasCellar = false;
+    }
+
+    if (feature) {
+      // Features are stored as a JSON array; LIKE matches the JSON text on
+      // both MySQL and SQLite without dialect-specific JSON functions.
+      where.features = { [Op.like]: `%${feature}%` };
+    }
+
+    if (assignedToUserId && assignedToUserId !== 'All') {
+      where.assignedToUserId = assignedToUserId;
+    }
+
+    if (assignedToGroupId && assignedToGroupId !== 'All') {
+      where.assignedToGroupId = assignedToGroupId;
+    }
+
+    if (sellerId && sellerId !== 'All') {
+      where.sellerId = sellerId;
+    }
+
+    if (Number.isFinite(minArea)) {
+      where.area = { ...where.area, [Op.gte]: minArea };
+    }
+
+    if (Number.isFinite(maxArea)) {
       where.area = { ...where.area, [Op.lte]: maxArea };
     }
-    
-    if (city) {
+
+    if (city && city !== 'All') {
       where.city = { [Op.like]: `%${city}%` };
+    }
+
+    if (country && country !== 'All') {
+      where.country = { [Op.like]: `%${country}%` };
     }
 
     if (projectId && projectId !== 'All') {
@@ -191,10 +296,13 @@ exports.getAllProperties = async (req, res) => {
       }
     }
 
+    const SORTABLE = ['createdAt', 'updatedAt', 'price', 'area', 'bedrooms', 'bathrooms', 'yearBuilt', 'floor', 'parkingSpaces'];
+    const orderField = SORTABLE.includes(sortBy) ? sortBy : 'createdAt';
+
     const { count, rows } = await Property.findAndCountAll({
       where,
-      include: [        { 
-          model: PriceHistory, 
+      include: [        {
+          model: PriceHistory,
           as: 'priceHistoryEntries',
           include: [{ model: Lead, as: 'lead', attributes: ['id', 'name', 'email'] }]
         },
@@ -203,7 +311,7 @@ exports.getAllProperties = async (req, res) => {
         { model: Seller, as: 'seller', attributes: ['id', 'name', 'email', 'phone'] },
         { model: Project, as: 'project', attributes: ['id', 'name', 'developer', 'city'] }
       ],
-      order: [['createdAt', 'DESC']],
+      order: [[orderField, sortDir]],
       limit,
       offset,
       // QA 2026-09-18: hasMany includes multiply rows; count must count
