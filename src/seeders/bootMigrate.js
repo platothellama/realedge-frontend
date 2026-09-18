@@ -43,6 +43,8 @@ const REQUIRED_COLUMNS = [
   ['Properties', 'cellarSize', 'FLOAT NULL'],
   // Master bedroom count (subset of bedrooms).
   ['Properties', 'masterBedrooms', 'INT NULL DEFAULT 0'],
+  // Number of balconies per property.
+  ['Properties', 'balconies', 'INT NULL DEFAULT 0'],
 ];
 
 // [table, column, default literal] — future-row defaults only, no rewrites.

@@ -199,13 +199,21 @@ const buildPropertyText = (property) => {
   const features = Array.isArray(property.features) ? property.features.join(', ') : '';
   const featureDescriptions = [
     property.parkingSpaces > 0 ? 'parking available' : '',
-    property.balcony ? 'has balcony' : '',
+    (Number(property.balconies) > 0 || property.balcony) ? 'has balcony' : '',
     property.furnished ? 'furnished' : '',
     property.floor ? `floor ${property.floor}` : '',
     property.view ? `${property.view} view` : ''
   ].filter(Boolean).join(', ');
   
   return `${property.title} ${property.description || ''} ${features} ${featureDescriptions} ${property.city} ${property.address} ${property.type}`.trim();
+};
+
+// A structured balcony count satisfies a balcony feature request even when
+// the free-text features array does not mention it (and vice versa).
+const propertyHasFeature = (property, propertyFeatures, feature) => {
+  if (propertyFeatures.some((pf) => pf.includes(feature) || feature.includes(pf))) return true;
+  if (feature === 'balcony' && Number(property.balconies) > 0) return true;
+  return false;
 };
 
 const generateEmbedding = async (text) => {
@@ -553,7 +561,7 @@ exports.matchPropertiesToBuyer = async (req, res) => {
 
       let matchedFeatures = 0;
       requiredFeatures.forEach(feature => {
-        if (propertyFeatures.some(pf => pf.includes(feature) || feature.includes(pf))) {
+        if (propertyHasFeature(property, propertyFeatures, feature)) {
           matchedFeatures++;
         }
       });
@@ -561,7 +569,7 @@ exports.matchPropertiesToBuyer = async (req, res) => {
       if (requiredFeatures.length > 0) {
         featureScore = matchedFeatures / requiredFeatures.length;
         requiredFeatures.forEach(feature => {
-          if (propertyFeatures.some(pf => pf.includes(feature) || feature.includes(pf))) {
+          if (propertyHasFeature(property, propertyFeatures, feature)) {
             const niceName = feature.charAt(0).toUpperCase() + feature.slice(1);
             if (!matchReasons.includes(niceName)) {
               matchReasons.push(niceName);
@@ -597,6 +605,7 @@ exports.matchPropertiesToBuyer = async (req, res) => {
           type: property.type,
           bedrooms: property.bedrooms,
           bathrooms: property.bathrooms,
+          balconies: Number(property.balconies) || 0,
           area: property.area,
           city: property.city,
           address: property.address,
@@ -1061,7 +1070,7 @@ exports.wizardSearch = async (req, res) => {
 
       let matchedFeatures = 0;
       requiredFeatures.forEach(feature => {
-        if (propertyFeatures.some(pf => pf.includes(feature) || feature.includes(pf))) {
+        if (propertyHasFeature(property, propertyFeatures, feature)) {
           matchedFeatures++;
         }
       });
@@ -1069,7 +1078,7 @@ exports.wizardSearch = async (req, res) => {
       if (requiredFeatures.length > 0) {
         featureScore = matchedFeatures / requiredFeatures.length;
         requiredFeatures.forEach(feature => {
-          if (propertyFeatures.some(pf => pf.includes(feature) || feature.includes(pf))) {
+          if (propertyHasFeature(property, propertyFeatures, feature)) {
             const niceName = feature.charAt(0).toUpperCase() + feature.slice(1);
             if (!matchReasons.includes(niceName)) {
               matchReasons.push(niceName);
@@ -1096,6 +1105,7 @@ exports.wizardSearch = async (req, res) => {
           type: property.type,
           bedrooms: property.bedrooms,
           bathrooms: property.bathrooms,
+          balconies: Number(property.balconies) || 0,
           area: property.area,
           city: property.city,
           address: property.address,

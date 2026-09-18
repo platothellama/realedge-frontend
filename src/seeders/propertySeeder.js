@@ -263,8 +263,10 @@ const seedProperties = async (count = 100) => {
       const status = getRandomElement(['Available', 'Available', 'Available', 'Reserved', 'Sold', 'Rented']);
       const yearBuilt = type === 'Land' ? null : (1970 + Math.floor(Math.random() * 55));
       const parkingSpaces = type === 'Land' ? 0 : (Math.random() > 0.3 ? Math.floor(Math.random() * 3) + 1 : 0);
+      const balconies = type === 'Land' || type === 'Office' ? 0 : (Math.random() > 0.4 ? 1 + Math.floor(Math.random() * 2) : 0);
       const hasPool = type !== 'Office' && type !== 'Land' && Math.random() > 0.7;
       const features = generateFeatures(type, bedrooms, hasPool);
+      if (balconies > 0 && !features.includes('Balcony')) features.push('Balcony');
       const numPhotos = 2 + Math.floor(Math.random() * 4);
       
       const property = {
@@ -277,6 +279,7 @@ const seedProperties = async (count = 100) => {
         bedrooms: bedrooms,
         masterBedrooms: bedrooms > 0 ? Math.min(bedrooms, Math.random() > 0.4 ? 1 + Math.floor(Math.random() * 2) : 0) : 0,
         bathrooms: bathrooms,
+        balconies: balconies,
         area: area,
         lotSize: type === 'Villa' || type === 'House' ? area * (2 + Math.random() * 2) : 0,
         yearBuilt: yearBuilt,

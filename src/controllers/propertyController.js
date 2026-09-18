@@ -39,6 +39,14 @@ const validateBedroomCounts = (bedrooms, masterBedrooms) => {
   return null;
 };
 
+// Balconies must be a whole number >= 0 when provided.
+const validateBalconies = (balconies) => {
+  if (balconies === undefined || balconies === null || balconies === '') return null;
+  const n = Number(balconies);
+  if (!Number.isInteger(n) || n < 0) return 'Balconies must be a whole number >= 0';
+  return null;
+};
+
 // Optional project grouping: accepts `projectId` (UUID or ''/null to ungroup)
 // and `newProject` ({ name, ... }) for on-the-fly creation from the listing form.
 const resolveProjectId = async (body) => {
@@ -80,6 +88,7 @@ exports.getAllProperties = async (req, res) => {
     const minBedrooms = req.query.minBedrooms ? parseInt(req.query.minBedrooms) : null;
     const maxBedrooms = req.query.maxBedrooms ? parseInt(req.query.maxBedrooms) : null;
     const minBathrooms = req.query.minBathrooms ? parseInt(req.query.minBathrooms) : null;
+    const minBalconies = req.query.minBalconies ? parseInt(req.query.minBalconies) : null;
     const minArea = req.query.minArea ? parseFloat(req.query.minArea) : null;
     const maxArea = req.query.maxArea ? parseFloat(req.query.maxArea) : null;
     const city = req.query.city;
@@ -132,6 +141,10 @@ exports.getAllProperties = async (req, res) => {
     
     if (minBathrooms) {
       where.bathrooms = { [Op.gte]: minBathrooms };
+    }
+
+    if (Number.isInteger(minBalconies)) {
+      where.balconies = { [Op.gte]: minBalconies };
     }
     
     if (minArea) {
@@ -218,6 +231,8 @@ exports.createProperty = async (req, res) => {
   try {
     const bedroomError = validateBedroomCounts(req.body.bedrooms, req.body.masterBedrooms);
     if (bedroomError) return res.status(400).json({ message: bedroomError });
+    const balconiesError = validateBalconies(req.body.balconies);
+    if (balconiesError) return res.status(400).json({ message: balconiesError });
     const { newSeller, sellerId, newProject, projectId, ...propertyData } = req.body;
 
     // QA 2026-09-18: PK, timestamps, server-computed sale figures and
@@ -315,6 +330,10 @@ exports.updateProperty = async (req, res) => {
     const effectiveMaster = propertyData.masterBedrooms !== undefined ? propertyData.masterBedrooms : property.masterBedrooms;
     const bedroomError = validateBedroomCounts(effectiveBedrooms, effectiveMaster);
     if (bedroomError) return res.status(400).json({ message: bedroomError });
+    const balconiesError = validateBalconies(
+      propertyData.balconies !== undefined ? propertyData.balconies : undefined
+    );
+    if (balconiesError) return res.status(400).json({ message: balconiesError });
 
     // QA 2026-09-18: same server-managed fields as create (the Sold flip
     // below recomputes soldPrice/soldAt/soldTo from the closed deal).

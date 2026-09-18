@@ -65,6 +65,11 @@ const Property = sequelize.define('Property', {
     type: DataTypes.INTEGER,
     defaultValue: 0
   },
+  balconies: {
+    type: DataTypes.INTEGER,
+    defaultValue: 0,
+    comment: 'Number of balconies'
+  },
   area: {
     type: DataTypes.FLOAT,
     defaultValue: 0
