@@ -19,6 +19,12 @@ class EmailService {
   }
 
   async sendEmail({ to, subject, body, campaignId, leadId, agentId }) {
+    // QA hardening 2026-09-18: validate the recipient (previously any
+    // array/object flowed into SendGrid + the tracking table).
+    if (typeof to !== 'string' || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to.trim())) {
+      return { success: false, error: 'Invalid recipient email' };
+    }
+
     const trackingId = this.generateTrackingId();
     
     const emailWithTracking = this.injectTrackingPixels(body, trackingId);
@@ -84,36 +90,46 @@ class EmailService {
   }
 
   async sendBulkEmails(emails) {
-    const results = await Promise.allSettled(
-      emails.map(email => this.sendEmail(email))
-    );
-    
+    // QA hardening 2026-09-18: bounded, chunked fan-out (was one unbounded
+    // Promise.allSettled over the whole list).
+    const list = Array.isArray(emails) ? emails.slice(0, 500) : [];
+    const all = [];
+    for (let i = 0; i < list.length; i += 25) {
+      const chunk = await Promise.allSettled(
+        list.slice(i, i + 25).map((email) => this.sendEmail(email))
+      );
+      all.push(...chunk);
+    }
+
     return {
-      total: emails.length,
-      successful: results.filter(r => r.status === 'fulfilled' && r.value.success).length,
-      failed: results.filter(r => r.status === 'rejected' || !r.value.success).length,
-      results
+      total: all.length,
+      successful: all.filter(r => r.status === 'fulfilled' && r.value.success).length,
+      failed: all.filter(r => r.status === 'rejected' || !r.value.success).length,
+      results: all
     };
   }
 
   injectTrackingPixels(html, trackingId) {
     const trackingUrl = `${process.env.API_URL || 'https://realedge-frontend.onrender.com'}/api/track/open/${trackingId}`;
     const trackingPixel = `<img src="${trackingUrl}" width="1" height="1" style="display:none" alt="" />`;
-    
-    return html + trackingPixel;
+
+    // QA hardening 2026-09-18: undefined body used to render "undefined<img…".
+    return `${html ?? ''}${trackingPixel}`;
   }
 
   wrapLinksWithTracking(html, trackingId) {
     const baseUrl = process.env.API_URL || 'https://realedge-frontend.onrender.com';
-    const wrappedHtml = html.replace(
+    // QA hardening 2026-09-18: encode the target (raw $1 broke URLs with &).
+    return `${html ?? ''}`.replace(
       /href=["'](https?:\/\/[^"']+)["']/g,
-      `href="${baseUrl}/api/track/click/${trackingId}?url=$1"`
+      (m, url) => `href="${baseUrl}/api/track/click/${trackingId}?url=${encodeURIComponent(url)}"`
     );
-    return wrappedHtml;
   }
 
   generateTrackingId() {
-    return 'em_' + Math.random().toString(36).substr(2, 9) + Date.now().toString(36);
+    // QA hardening 2026-09-18: 122-bit entropy (was ~48-bit Math.random,
+    // enumerable against the public pixel endpoints).
+    return 'em_' + require('crypto').randomUUID().replace(/-/g, '');
   }
 
   async handleOpenTracking(trackingId) {

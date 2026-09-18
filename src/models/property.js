@@ -56,6 +56,11 @@ const Property = sequelize.define('Property', {
     type: DataTypes.INTEGER,
     defaultValue: 0
   },
+  masterBedrooms: {
+    type: DataTypes.INTEGER,
+    defaultValue: 0,
+    comment: 'How many of the bedrooms are master bedrooms (<= bedrooms)'
+  },
   bathrooms: {
     type: DataTypes.INTEGER,
     defaultValue: 0
@@ -134,6 +139,11 @@ const Property = sequelize.define('Property', {
     allowNull: true,
     comment: 'Associated seller/owner of the property'
   },
+  projectId: {
+    type: DataTypes.UUID,
+    allowNull: true,
+    comment: 'Optional project/building grouping (apartments in same project share it)'
+  },
   commissionPercentage: {
     type: DataTypes.FLOAT,
     defaultValue: 0,
@@ -194,6 +204,14 @@ const Property = sequelize.define('Property', {
     defaultValue: false
   },
   terraceSize: {
+    type: DataTypes.FLOAT,
+    allowNull: true
+  },
+  hasCellar: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: false
+  },
+  cellarSize: {
     type: DataTypes.FLOAT,
     allowNull: true
   }

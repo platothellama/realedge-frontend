@@ -20,7 +20,7 @@ exports.getMarketAnalysis = async (req, res) => {
 
     res.status(200).json(analyses);
   } catch (error) {
-    res.status(500).json({ message: 'Error fetching market analysis', error: error.message });
+    res.status(500).json({ message: 'Error fetching market analysis', ...require('../utils/http').safeError(error) });
   }
 };
 
@@ -121,7 +121,7 @@ exports.analyzeProperty = async (req, res) => {
       }
     });
   } catch (error) {
-    res.status(500).json({ message: 'Error analyzing property', error: error.message });
+    res.status(500).json({ message: 'Error analyzing property', ...require('../utils/http').safeError(error) });
   }
 };
 
@@ -137,7 +137,7 @@ exports.getMarketTrends = async (req, res) => {
 
     res.status(200).json(trends);
   } catch (error) {
-    res.status(500).json({ message: 'Error fetching market trends', error: error.message });
+    res.status(500).json({ message: 'Error fetching market trends', ...require('../utils/http').safeError(error) });
   }
 };
 
@@ -174,7 +174,7 @@ exports.getLocationInsights = async (req, res) => {
       }))
     });
   } catch (error) {
-    res.status(500).json({ message: 'Error fetching location insights', error: error.message });
+    res.status(500).json({ message: 'Error fetching location insights', ...require('../utils/http').safeError(error) });
   }
 };
 
@@ -438,6 +438,6 @@ exports.getMarketIntelligence = async (req, res) => {
       }
     });
   } catch (error) {
-    res.status(500).json({ message: 'Error fetching market intelligence', error: error.message });
+    res.status(500).json({ message: 'Error fetching market intelligence', ...require('../utils/http').safeError(error) });
   }
 };

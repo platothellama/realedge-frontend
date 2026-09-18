@@ -20,7 +20,7 @@ exports.getWorkflows = async (req, res) => {
 
     res.status(200).json(workflows);
   } catch (error) {
-    res.status(500).json({ message: 'Error fetching workflows', error: error.message });
+    res.status(500).json({ message: 'Error fetching workflows', ...require('../utils/http').safeError(error) });
   }
 };
 
@@ -41,7 +41,7 @@ exports.createWorkflow = async (req, res) => {
 
     res.status(201).json(workflow);
   } catch (error) {
-    res.status(400).json({ message: 'Error creating workflow', error: error.message });
+    res.status(400).json({ message: 'Error creating workflow', ...require('../utils/http').safeError(error) });
   }
 };
 
@@ -87,7 +87,7 @@ exports.updateWorkflowStage = async (req, res) => {
 
     res.status(200).json(workflow);
   } catch (error) {
-    res.status(400).json({ message: 'Error updating workflow', error: error.message });
+    res.status(400).json({ message: 'Error updating workflow', ...require('../utils/http').safeError(error) });
   }
 };
 
@@ -115,6 +115,6 @@ exports.getWorkflowStats = async (req, res) => {
       completedThisMonth
     });
   } catch (error) {
-    res.status(500).json({ message: 'Error fetching workflow stats', error: error.message });
+    res.status(500).json({ message: 'Error fetching workflow stats', ...require('../utils/http').safeError(error) });
   }
 };

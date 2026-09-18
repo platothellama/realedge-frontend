@@ -24,7 +24,7 @@ exports.getTransactions = async (req, res) => {
 
     res.status(200).json(transactions);
   } catch (error) {
-    res.status(500).json({ message: 'Error fetching transactions', error: error.message });
+    res.status(500).json({ message: 'Error fetching transactions', ...require('../utils/http').safeError(error) });
   }
 };
 
@@ -74,19 +74,21 @@ exports.getFinancialSummary = async (req, res) => {
       monthlyData
     });
   } catch (error) {
-    res.status(500).json({ message: 'Error fetching financial summary', error: error.message });
+    res.status(500).json({ message: 'Error fetching financial summary', ...require('../utils/http').safeError(error) });
   }
 };
 
 exports.createTransaction = async (req, res) => {
   try {
+    // QA hardening 2026-09-18: never accept client id (PK overwrite).
+    const { id, createdAt, updatedAt, ...body } = req.body || {};
     const transaction = await Transaction.create({
-      ...req.body,
+      ...body,
       userId: req.user.id
     });
     res.status(201).json(transaction);
   } catch (error) {
-    res.status(400).json({ message: 'Error creating transaction', error: error.message });
+    res.status(400).json({ message: 'Error creating transaction', ...require('../utils/http').safeError(error) });
   }
 };
 
@@ -95,10 +97,12 @@ exports.updateTransaction = async (req, res) => {
     const transaction = await Transaction.findByPk(req.params.id);
     if (!transaction) return res.status(404).json({ message: 'Transaction not found' });
 
-    await transaction.update(req.body);
+    // QA hardening 2026-09-18: creator attribution and PK are immutable.
+    const { id, userId, createdAt, updatedAt, ...updateData } = req.body || {};
+    await transaction.update(updateData);
     res.status(200).json(transaction);
   } catch (error) {
-    res.status(400).json({ message: 'Error updating transaction', error: error.message });
+    res.status(400).json({ message: 'Error updating transaction', ...require('../utils/http').safeError(error) });
   }
 };
 
@@ -111,6 +115,6 @@ exports.deleteTransaction = async (req, res) => {
 
     return res.status(403).json({ message: 'Transactions cannot be deleted (void-only). Set status to cancelled instead (D21).' });
   } catch (error) {
-    res.status(500).json({ message: 'Error deleting transaction', error: error.message });
+    res.status(500).json({ message: 'Error deleting transaction', ...require('../utils/http').safeError(error) });
   }
 };

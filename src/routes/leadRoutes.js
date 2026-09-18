@@ -8,6 +8,9 @@ router.use(protect);
 router.get('/', leadController.getAllLeads);
 router.get('/:id', leadController.getLeadById);
 router.post('/', leadController.createLead);
+// QA 2026-09-18: static path before '/:id' routes (same shadowing class as
+// the public-sign routes). Validated, capped, transactional bulk import.
+router.post('/bulk', leadController.bulkCreateLeads);
 router.put('/:id', leadController.updateLead);
 router.delete('/:id', leadController.deleteLead);
 router.post('/:id/convert-to-deal', leadController.convertToDeal);

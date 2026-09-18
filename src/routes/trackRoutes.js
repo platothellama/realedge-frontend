@@ -21,13 +21,30 @@ router.get('/click/:trackingId', async (req, res) => {
   const { trackingId } = req.params;
   const { url } = req.query;
   
-  if (!url) {
+  if (!url || typeof url !== 'string') {
     return res.status(400).json({ error: 'Missing url parameter' });
   }
-  
-  await emailService.handleClickTracking(trackingId, url);
-  
-  res.redirect(url);
+
+  // QA hardening 2026-09-18: prevent open-redirect abuse (phishing via
+  // /api/track/click?url=https://evil.example). Only http(s) URLs with a
+  // hostname are followed; anything else is rejected before redirecting.
+  let target;
+  try {
+    target = new URL(url);
+  } catch {
+    return res.status(400).json({ error: 'Invalid url parameter' });
+  }
+  if (target.protocol !== 'http:' && target.protocol !== 'https:') {
+    return res.status(400).json({ error: 'Invalid url parameter' });
+  }
+  // Never redirect back to our own tracking endpoint (loop / abuse).
+  if (target.pathname.startsWith('/api/track/')) {
+    return res.status(400).json({ error: 'Invalid url parameter' });
+  }
+
+  await emailService.handleClickTracking(trackingId, target.toString());
+
+  res.redirect(target.toString());
 });
 
 module.exports = router;

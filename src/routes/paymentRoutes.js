@@ -1,9 +1,13 @@
 const express = require('express');
 const router = express.Router();
 const paymentController = require('../controllers/paymentController');
-const { protect } = require('../middleware/authMiddleware');
+const { protect, restrictTo } = require('../middleware/authMiddleware');
 
+// QA 2026-09-18: finance-only surface (mirrors the frontend route gate).
+// Previously any authenticated role (incl. Client) could list/read/create
+// any deal's payments and mutate payment plans.
 router.use(protect);
+router.use(restrictTo('Super Admin', 'Admin', 'Accountant'));
 
 // NOTE: specific paths must be registered before '/:id' so they are not
 // shadowed by the id param route.

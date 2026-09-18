@@ -23,7 +23,7 @@ exports.getAnnouncements = async (req, res) => {
 
     res.status(200).json(announcements);
   } catch (error) {
-    res.status(500).json({ message: 'Error fetching announcements', error: error.message });
+    res.status(500).json({ message: 'Error fetching announcements', ...require('../utils/http').safeError(error) });
   }
 };
 
@@ -35,7 +35,7 @@ exports.createAnnouncement = async (req, res) => {
     });
     res.status(201).json(announcement);
   } catch (error) {
-    res.status(400).json({ message: 'Error creating announcement', error: error.message });
+    res.status(400).json({ message: 'Error creating announcement', ...require('../utils/http').safeError(error) });
   }
 };
 
@@ -44,10 +44,12 @@ exports.updateAnnouncement = async (req, res) => {
     const announcement = await Announcement.findByPk(req.params.id);
     if (!announcement) return res.status(404).json({ message: 'Announcement not found' });
 
-    await announcement.update(req.body);
+    // QA hardening 2026-09-18: authorship is immutable.
+    const { createdByUserId, id, ...updateData } = req.body || {};
+    await announcement.update(updateData);
     res.status(200).json(announcement);
   } catch (error) {
-    res.status(400).json({ message: 'Error updating announcement', error: error.message });
+    res.status(400).json({ message: 'Error updating announcement', ...require('../utils/http').safeError(error) });
   }
 };
 
@@ -59,7 +61,7 @@ exports.deleteAnnouncement = async (req, res) => {
     await announcement.update({ isActive: false });
     res.status(200).json({ message: 'Announcement deleted' });
   } catch (error) {
-    res.status(500).json({ message: 'Error deleting announcement', error: error.message });
+    res.status(500).json({ message: 'Error deleting announcement', ...require('../utils/http').safeError(error) });
   }
 };
 
@@ -71,6 +73,6 @@ exports.pinAnnouncement = async (req, res) => {
     await announcement.update({ isPinned: !announcement.isPinned });
     res.status(200).json(announcement);
   } catch (error) {
-    res.status(400).json({ message: 'Error pinning announcement', error: error.message });
+    res.status(400).json({ message: 'Error pinning announcement', ...require('../utils/http').safeError(error) });
   }
 };

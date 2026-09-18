@@ -39,6 +39,14 @@ class CommissionService {
   }
 
   /**
+   * Round money to integer cents (QA 2026-09-18: unrounded floats drift
+   * against the D13 exact-equality overpay guards).
+   */
+  roundCents(x) {
+    return Math.round(Number(x) * 100) / 100;
+  }
+
+  /**
    * Calculate total commission from a property deal
    * @param {Object} property - Property instance
    * @param {Number} finalPrice - Final sale price
@@ -46,22 +54,29 @@ class CommissionService {
    */
   calculatePropertyCommission(property, finalPrice) {
     if (!property) return 0;
-    
+
     const { commissionType, commissionValue, commissionPercentage } = property;
-    
-    console.log('Calculating commission:', { commissionType, commissionValue, commissionPercentage, finalPrice });
-    
+
+    // QA hardening 2026-09-18: garbage in ("abc", negatives, >100%) used to
+    // flow straight into stored money as NaN/negative. Junk → 0, cents rounded.
+    const price = Number(finalPrice);
+    if (!Number.isFinite(price) || price < 0) return 0;
+
     if (commissionType === 'fixed' && commissionValue != null) {
-      return parseFloat(commissionValue);
+      const v = Number(commissionValue);
+      if (!Number.isFinite(v) || v < 0) return 0;
+      return this.roundCents(v);
     }
-    
+
     if (commissionType === 'percentage' && commissionValue != null) {
-      return parseFloat(finalPrice) * (parseFloat(commissionValue) / 100);
+      const pct = Number(commissionValue);
+      if (!Number.isFinite(pct) || pct < 0 || pct > 100) return 0;
+      return this.roundCents(price * (pct / 100));
     }
-    
-    const fallbackCommission = parseFloat(finalPrice) * (parseFloat(commissionPercentage || 0) / 100);
-    console.log('Fallback commission calculation:', fallbackCommission);
-    return fallbackCommission;
+
+    const fallbackPct = Number(commissionPercentage || 0);
+    if (!Number.isFinite(fallbackPct) || fallbackPct < 0 || fallbackPct > 100) return 0;
+    return this.roundCents(price * (fallbackPct / 100));
   }
 
   /**
@@ -83,8 +98,11 @@ class CommissionService {
    * @returns {Number} Split percentage
    */
   getRoleSplitPercentage(role, customSplit) {
-    if (customSplit !== null && customSplit !== undefined) {
-      return customSplit;
+    // QA hardening 2026-09-18: a stored negative/NaN/>100 override used to
+    // poison the pro-rata scaling downstream — clamp to a valid percentage.
+    if (customSplit !== null && customSplit !== undefined && customSplit !== '') {
+      const v = Number(customSplit);
+      if (Number.isFinite(v) && v >= 0 && v <= 100) return v;
     }
     return DEFAULT_ROLE_SPLITS[role] || DEFAULT_ROLE_SPLITS.agent;
   }
@@ -335,16 +353,22 @@ class CommissionService {
    */
   async approveCommission(dealCommissionId, approvedByUserId) {
     const commission = await DealCommission.findByPk(dealCommissionId);
-    
+
     if (!commission) {
       throw new Error('Commission not found');
     }
-    
+
+    // QA hardening 2026-09-18: pending → approved only (no paid→approved
+    // regression, no double-approve timestamp rewrite).
+    if (commission.status !== 'pending') {
+      throw new Error(`Only pending commissions can be approved (current: ${commission.status})`);
+    }
+
     await commission.update({
       status: 'approved',
       approvedAt: new Date()
     });
-    
+
     return commission;
   }
 
@@ -355,16 +379,22 @@ class CommissionService {
    */
   async markAsPaid(dealCommissionId) {
     const commission = await DealCommission.findByPk(dealCommissionId);
-    
+
     if (!commission) {
       throw new Error('Commission not found');
     }
-    
+
+    // QA hardening 2026-09-18: approved → paid only (no pending → paid
+    // approval skip, no paid → paid timestamp rewrite).
+    if (commission.status !== 'approved') {
+      throw new Error(`Only approved commissions can be marked paid (current: ${commission.status})`);
+    }
+
     await commission.update({
       status: 'paid',
       paidAt: new Date()
     });
-    
+
     return commission;
   }
 
@@ -373,7 +403,13 @@ class CommissionService {
    * @param {Object} settings - { company: 40, team: 60 }
    */
   async updateCommissionSettings(settings) {
-    const { company, team } = settings;
+    // QA hardening 2026-09-18: coerce before comparing — string "40"+"60"
+    // used to become "4060" and fail/pass inconsistently.
+    const company = Number(settings?.company);
+    const team = Number(settings?.team);
+    if (!Number.isFinite(company) || !Number.isFinite(team)) {
+      throw new Error('Company and team percentages must be numbers');
+    }
 
     // PHASE 2 (D7): splits are admin-configurable; enforce valid range.
     if (company < 0 || company > 100 || team < 0 || team > 100) {

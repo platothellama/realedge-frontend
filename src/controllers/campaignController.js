@@ -16,19 +16,20 @@ exports.getCampaigns = async (req, res) => {
 
     res.status(200).json(campaigns);
   } catch (error) {
-    res.status(500).json({ message: 'Error fetching campaigns', error: error.message });
+    res.status(500).json({ message: 'Error fetching campaigns', ...require('../utils/http').safeError(error) });
   }
 };
 
 exports.createCampaign = async (req, res) => {
   try {
+    const { id, createdAt, updatedAt, createdByUserId, ...body } = req.body || {};
     const campaign = await Campaign.create({
-      ...req.body,
+      ...body,
       createdByUserId: req.user.id
     });
     res.status(201).json(campaign);
   } catch (error) {
-    res.status(400).json({ message: 'Error creating campaign', error: error.message });
+    res.status(400).json({ message: 'Error creating campaign', ...require('../utils/http').safeError(error) });
   }
 };
 
@@ -37,10 +38,11 @@ exports.updateCampaign = async (req, res) => {
     const campaign = await Campaign.findByPk(req.params.id);
     if (!campaign) return res.status(404).json({ message: 'Campaign not found' });
 
-    await campaign.update(req.body);
+    const { id, createdAt, updatedAt, createdByUserId, ...updates } = req.body || {};
+    await campaign.update(updates);
     res.status(200).json(campaign);
   } catch (error) {
-    res.status(400).json({ message: 'Error updating campaign', error: error.message });
+    res.status(400).json({ message: 'Error updating campaign', ...require('../utils/http').safeError(error) });
   }
 };
 
@@ -52,7 +54,7 @@ exports.deleteCampaign = async (req, res) => {
     await campaign.destroy();
     res.status(200).json({ message: 'Campaign deleted' });
   } catch (error) {
-    res.status(500).json({ message: 'Error deleting campaign', error: error.message });
+    res.status(500).json({ message: 'Error deleting campaign', ...require('../utils/http').safeError(error) });
   }
 };
 
@@ -105,7 +107,7 @@ exports.sendCampaign = async (req, res) => {
       simulated: !emailService.isConfigured
     });
   } catch (error) {
-    res.status(500).json({ message: 'Error sending campaign', error: error.message });
+    res.status(500).json({ message: 'Error sending campaign', ...require('../utils/http').safeError(error) });
   }
 };
 
@@ -140,6 +142,6 @@ exports.getCampaignStats = async (req, res) => {
       byType
     });
   } catch (error) {
-    res.status(500).json({ message: 'Error fetching campaign stats', error: error.message });
+    res.status(500).json({ message: 'Error fetching campaign stats', ...require('../utils/http').safeError(error) });
   }
 };

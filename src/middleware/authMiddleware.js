@@ -137,8 +137,7 @@ exports.checkPermission = (permissionKey) => {
     } catch (error) {
       res.status(500).json({
         status: 'error',
-        message: 'Permission check failed',
-        error: error.message
+        message: 'Permission check failed'
       });
     }
   };
@@ -183,8 +182,7 @@ exports.checkGroupRole = (groupId, roles) => {
     } catch (error) {
       res.status(500).json({
         status: 'error',
-        message: 'Group role check failed',
-        error: error.message
+        message: 'Group role check failed'
       });
     }
   };

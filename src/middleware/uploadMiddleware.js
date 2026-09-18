@@ -11,6 +11,7 @@ const storage = multer.memoryStorage();
 // official type for that extension. Anything else (html/svg/xml/js/exe/…)
 // is rejected, which also blocks script execution via uploaded files.
 const IMAGE_EXTS = new Set(['jpeg', 'jpg', 'png', 'webp', 'gif']);
+const VIDEO_EXTS = new Set(['mp4', 'webm', 'mov']);
 const DOCUMENT_EXTS = new Set([
   'jpeg', 'jpg', 'png', 'webp', 'gif',
   'pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'txt', 'csv'
@@ -23,6 +24,9 @@ const MIME_BY_EXT = {
   png: ['image/png'],
   webp: ['image/webp'],
   gif: ['image/gif'],
+  mp4: ['video/mp4'],
+  webm: ['video/webm'],
+  mov: ['video/quicktime', 'video/mp4'],
   pdf: ['application/pdf'],
   doc: ['application/msword'],
   docx: ['application/vnd.openxmlformats-officedocument.wordprocessingml.document'],
@@ -34,7 +38,7 @@ const MIME_BY_EXT = {
   csv: ['text/csv', 'application/vnd.ms-excel']
 };
 
-const ERROR_HINT = 'Images: jpeg, jpg, png, webp, gif. Documents: pdf, doc, docx, xls, xlsx, ppt, pptx, txt, csv.';
+const ERROR_HINT = 'Images: jpeg, jpg, png, webp, gif. Videos: mp4, webm, mov (max 100MB). Documents: pdf, doc, docx, xls, xlsx, ppt, pptx, txt, csv.';
 
 // Magic-byte signatures (content sniffing) for common binary types.
 // Used by assertFileMagic() in controllers AFTER multer accepts the file,
@@ -77,12 +81,16 @@ const fileFilter = (req, file, cb) => {
   const ext = getExt(file.originalname);
   const mime = (file.mimetype || '').toLowerCase().split(';')[0].trim();
 
-  if (file.fieldname === 'file') {
+  if (file.fieldname === 'file' || file.fieldname === 'document') {
     if (DOCUMENT_EXTS.has(ext) && (MIME_BY_EXT[ext] || []).includes(mime)) {
       return cb(null, true);
     }
   } else if (file.fieldname === 'image') {
     if (IMAGE_EXTS.has(ext) && (MIME_BY_EXT[ext] || []).includes(mime)) {
+      return cb(null, true);
+    }
+  } else if (file.fieldname === 'video') {
+    if (VIDEO_EXTS.has(ext) && (MIME_BY_EXT[ext] || []).includes(mime)) {
       return cb(null, true);
     }
   }
@@ -92,7 +100,9 @@ const fileFilter = (req, file, cb) => {
 
 const upload = multer({
   storage: storage,
-  limits: { fileSize: 10 * 1024 * 1024, files: 1 },
+  // 100MB ceiling so property videos fit; images/docs are still small in
+  // practice (route handler enforces per-kind caps below multer).
+  limits: { fileSize: 100 * 1024 * 1024, files: 1 },
   fileFilter: fileFilter
 });
 

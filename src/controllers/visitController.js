@@ -11,7 +11,12 @@ exports.getAllVisits = async (req, res) => {
       whereClause = { brokerId: userId };
     }
 
-    const visits = await Visit.findAll({
+    // QA 2026-09-18: bounded list (same contract as leads: explicit
+    // ?page/?limit returns {data, pagination}; the calendar keeps the raw
+    // array, capped).
+    const page = Math.min(Math.max(parseInt(req.query.page, 10) || 0, 0), 1000);
+    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 0, 0), 200);
+    const findOpts = {
       where: whereClause,
       include: [
         { model: Property, as: 'property', attributes: ['id', 'title', 'address', 'city'] },
@@ -19,11 +24,24 @@ exports.getAllVisits = async (req, res) => {
         { model: Lead, as: 'lead', attributes: ['id', 'name', 'email', 'phone'] }
       ],
       order: [['visitDate', 'ASC']]
-    });
+    };
+    if (page > 0 && limit > 0) {
+      findOpts.limit = limit;
+      findOpts.offset = (page - 1) * limit;
+      // distinct: includes multiply rows; count must count visits.
+      findOpts.distinct = true;
+      const { count, rows } = await Visit.findAndCountAll(findOpts);
+      return res.status(200).json({
+        data: rows,
+        pagination: { page, limit, total: count, totalPages: Math.ceil(count / limit) }
+      });
+    }
+    findOpts.limit = 2000;
+    const visits = await Visit.findAll(findOpts);
 
     res.status(200).json(visits);
   } catch (error) {
-    res.status(500).json({ message: 'Error fetching visits', error: error.message });
+    res.status(500).json({ message: 'Error fetching visits', ...require('../utils/http').safeError(error) });
   }
 };
 
@@ -48,16 +66,24 @@ exports.getVisitById = async (req, res) => {
 
     res.status(200).json(visit);
   } catch (error) {
-    res.status(500).json({ message: 'Error fetching visit', error: error.message });
+    res.status(500).json({ message: 'Error fetching visit', ...require('../utils/http').safeError(error) });
   }
 };
 
 exports.createVisit = async (req, res) => {
   try {
     const visitData = { ...req.body };
-    
-    // Auto-assign broker if not provided
-    if (!visitData.brokerId) {
+    // QA 2026-09-18: PK/timestamps never client-settable.
+    for (const f of ['id', 'createdAt', 'updatedAt']) {
+      delete visitData[f];
+    }
+
+    // QA hardening 2026-09-18: non-admins cannot create visits as other
+    // brokers (rows would vanish from their list and pollute the victim's).
+    const role = req.user?.role;
+    if (role !== 'Super Admin' && role !== 'Admin') {
+      visitData.brokerId = req.user.id;
+    } else if (!visitData.brokerId) {
       visitData.brokerId = req.user.id;
     }
 
@@ -68,7 +94,7 @@ exports.createVisit = async (req, res) => {
 
     res.status(201).json(visit);
   } catch (error) {
-    res.status(400).json({ message: 'Error creating visit', error: error.message });
+    res.status(400).json({ message: 'Error creating visit', ...require('../utils/http').safeError(error) });
   }
 };
 
@@ -84,13 +110,22 @@ exports.updateVisit = async (req, res) => {
       return res.status(403).json({ message: 'Access denied' });
     }
 
-    await visit.update(req.body);
+    // QA hardening 2026-09-18: only admins may reassign a visit to another
+    // broker (otherwise visits can be silently transferred away).
+    const updateData = { ...req.body };
+    for (const f of ['id', 'createdAt', 'updatedAt']) {
+      delete updateData[f];
+    }
+    if (userRole !== 'Super Admin' && userRole !== 'Admin') {
+      delete updateData.brokerId;
+    }
+    await visit.update(updateData);
     
     // TODO: Update Google Calendar Event
 
     res.status(200).json(visit);
   } catch (error) {
-    res.status(400).json({ message: 'Error updating visit', error: error.message });
+    res.status(400).json({ message: 'Error updating visit', ...require('../utils/http').safeError(error) });
   }
 };
 
@@ -111,6 +146,6 @@ exports.deleteVisit = async (req, res) => {
     await visit.destroy();
     res.status(200).json({ message: 'Visit deleted successfully' });
   } catch (error) {
-    res.status(500).json({ message: 'Error deleting visit', error: error.message });
+    res.status(500).json({ message: 'Error deleting visit', ...require('../utils/http').safeError(error) });
   }
 };

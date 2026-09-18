@@ -34,6 +34,15 @@ const REQUIRED_COLUMNS = [
   ['Users', 'passwordChangedAt', 'DATETIME NULL'],
   ['Payments', 'rateDate', 'DATETIME NULL'],
   ['DealCommissions', 'reserveAmount', 'DECIMAL(15,2) NULL DEFAULT 0'],
+  // Optional project grouping for listings (standalone listings keep NULL).
+  ['Properties', 'projectId', 'CHAR(36) NULL'],
+  // Terrace / cellar flags (mirror pattern: hasX + XSize).
+  ['Properties', 'hasTerrace', 'TINYINT(1) NULL DEFAULT 0'],
+  ['Properties', 'terraceSize', 'FLOAT NULL'],
+  ['Properties', 'hasCellar', 'TINYINT(1) NULL DEFAULT 0'],
+  ['Properties', 'cellarSize', 'FLOAT NULL'],
+  // Master bedroom count (subset of bedrooms).
+  ['Properties', 'masterBedrooms', 'INT NULL DEFAULT 0'],
 ];
 
 // [table, column, default literal] — future-row defaults only, no rewrites.

@@ -1,13 +1,17 @@
 const express = require('express');
 const router = express.Router();
 const websiteController = require('../controllers/websiteController');
-const { protect } = require('../middleware/authMiddleware');
+const { protect, restrictTo } = require('../middleware/authMiddleware');
 
 // Public routes
 router.get('/public/:slug', websiteController.getWebsiteBySlug);
 
 // Protected routes
 router.use(protect);
+// QA 2026-09-18: builder/editor UI is Super-Admin/Admin-only in the
+// frontend; the API previously let any role (incl. Client) create, edit,
+// publish and export websites.
+router.use(restrictTo('Super Admin', 'Admin'));
 
 // Websites
 router.get('/', websiteController.getWebsites);

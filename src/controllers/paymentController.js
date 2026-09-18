@@ -1,5 +1,6 @@
 const { Payment, PaymentPlan, Deal, Invoice, User, Property, Lead } = require('../models/associations');
 const { Op } = require('sequelize');
+const { sequelize } = require('../config/database');
 
 exports.getAllPayments = async (req, res) => {
   try {
@@ -24,7 +25,7 @@ exports.getAllPayments = async (req, res) => {
 
     res.status(200).json(payments);
   } catch (error) {
-    res.status(500).json({ message: 'Error fetching payments', error: error.message });
+    res.status(500).json({ message: 'Error fetching payments', ...require('../utils/http').safeError(error) });
   }
 };
 
@@ -40,7 +41,7 @@ exports.getPaymentById = async (req, res) => {
     if (!payment) return res.status(404).json({ message: 'Payment not found' });
     res.status(200).json(payment);
   } catch (error) {
-    res.status(500).json({ message: 'Error fetching payment', error: error.message });
+    res.status(500).json({ message: 'Error fetching payment', ...require('../utils/http').safeError(error) });
   }
 };
 
@@ -56,8 +57,8 @@ exports.createPayment = async (req, res) => {
     // LBP without a valid rate is HELD (Pending, amountInUSD NULL, excluded
     // from sums). Default status Pending. Overpayment rejected exact (D13).
     const amt = Number(amount);
-    if (!Number.isFinite(amt) || amt < 0) {
-      return res.status(400).json({ message: 'Payment amount must be a non-negative number' });
+    if (!Number.isFinite(amt) || amt <= 0) {
+      return res.status(400).json({ message: 'Payment amount must be a positive number' });
     }
     const cur = currency || 'USD';
     const rate = exchangeRate !== undefined && exchangeRate !== null && exchangeRate !== '' ? Number(exchangeRate) : null;
@@ -75,35 +76,53 @@ exports.createPayment = async (req, res) => {
     }
 
     // D13 exact overpay guard (Confirmed totals only; held rows excluded).
-    if (dealId && amountInUSD !== null) {
-      const deal = await Deal.findByPk(dealId);
-      if (!deal) return res.status(404).json({ message: 'Deal not found' });
-      const confirmed = await Payment.sum('amountInUSD', { where: { dealId, status: 'Confirmed' } }) || 0;
-      const outstanding = Number(deal.finalPrice || 0) - Number(confirmed || 0);
-      if (amt > 0 && (Number(confirmed) + amountInUSD) - Number(deal.finalPrice || 0) > 0) {
-        return res.status(400).json({ message: `Overpayment rejected: outstanding is ${outstanding.toFixed(2)} (D13, exact)` });
+    // QA 2026-09-18: guard + insert run inside one transaction with a row
+    // lock on the deal, so two parallel payments cannot both pass the guard
+    // and overpay the deal (double-submit / double-click safe).
+    const t = await sequelize.transaction();
+    let payment;
+    try {
+      if (dealId && amountInUSD !== null) {
+        const deal = await Deal.findByPk(dealId, { transaction: t, lock: t.LOCK.UPDATE });
+        if (!deal) {
+          await t.rollback();
+          return res.status(404).json({ message: 'Deal not found' });
+        }
+        const confirmed = await Payment.sum('amountInUSD', { where: { dealId, status: 'Confirmed' }, transaction: t }) || 0;
+        const outstanding = Number(deal.finalPrice || 0) - Number(confirmed || 0);
+        if ((Number(confirmed) + amountInUSD) - Number(deal.finalPrice || 0) > 0) {
+          await t.rollback();
+          return res.status(400).json({ message: `Overpayment rejected: outstanding is ${outstanding.toFixed(2)} (D13, exact)` });
+        }
       }
-    }
 
-    const payment = await Payment.create({
-      dealId,
-      invoiceId,
-      installmentNumber,
-      payerName,
-      payerPhone,
-      amount: amt,
-      currency: cur,
-      exchangeRate: rate,
-      amountInUSD,
-      rateDate: paymentDate ? new Date(paymentDate) : new Date(),
-      paymentDate,
-      paymentMethod,
-      referenceNumber,
-      bankName,
-      notes: heldForRate ? [notes, 'HELD: missing/invalid LBP rate (D11)'].filter(Boolean).join(' | ') : notes,
-      status: heldForRate ? 'Pending' : (status || 'Pending'),
-      recordedByUserId: req.user.id
-    });
+      payment = await Payment.create({
+        dealId,
+        invoiceId,
+        installmentNumber,
+        payerName,
+        payerPhone,
+        amount: amt,
+        currency: cur,
+        exchangeRate: rate,
+        amountInUSD,
+        rateDate: paymentDate ? new Date(paymentDate) : new Date(),
+        paymentDate,
+        paymentMethod,
+        referenceNumber,
+        bankName,
+        notes: heldForRate ? [notes, 'HELD: missing/invalid LBP rate (D11)'].filter(Boolean).join(' | ') : notes,
+        // QA hardening 2026-09-18: payments are born Pending; Confirmed must
+        // come from the update flow (D19 Accountant/Admin gate). Honoring
+        // client `status` here bypassed confirmation at birth.
+        status: 'Pending',
+        recordedByUserId: req.user.id
+      }, { transaction: t });
+      await t.commit();
+    } catch (txErr) {
+      try { await t.rollback(); } catch (_) { /* already settled */ }
+      throw txErr;
+    }
 
     const fullPayment = await Payment.findByPk(payment.id, {
       include: [
@@ -113,7 +132,7 @@ exports.createPayment = async (req, res) => {
 
     res.status(201).json(fullPayment);
   } catch (error) {
-    res.status(400).json({ message: 'Error creating payment', error: error.message });
+    res.status(400).json({ message: 'Error creating payment', ...require('../utils/http').safeError(error) });
   }
 };
 
@@ -130,15 +149,51 @@ exports.updatePayment = async (req, res) => {
       }
     }
 
+    // QA hardening 2026-09-18: status state machine. Confirmed rows feed
+    // revenue sums — leaving Confirmed must only go to Refunded (never back
+    // to Pending, which would silently erase revenue); Refunded is terminal.
+    const PAYMENT_TRANSITIONS = {
+      Pending: ['Pending', 'Confirmed', 'Rejected'],
+      Confirmed: ['Confirmed', 'Refunded'],
+      Rejected: ['Rejected', 'Pending'],
+      Refunded: ['Refunded']
+    };
     const updateData = { ...req.body };
+    // QA 2026-09-18: PK/timestamps never client-settable.
+    for (const f of ['id', 'createdAt', 'updatedAt']) {
+      delete updateData[f];
+    }
+    if (updateData.status !== undefined) {
+      const allowed = PAYMENT_TRANSITIONS[payment.status];
+      if (!allowed) {
+        return res.status(400).json({ message: `Invalid current payment status: ${payment.status}` });
+      }
+      if (!allowed.includes(updateData.status)) {
+        return res.status(400).json({ message: `Cannot move payment from ${payment.status} to ${updateData.status}` });
+      }
+    }
+    // QA hardening 2026-09-18: server-computed/audit fields are never
+    // client-settable (amountInUSD could otherwise be forged without
+    // changing amount; recordedByUserId impersonates the recorder).
+    delete updateData.amountInUSD;
+    delete updateData.rateDate;
+    delete updateData.recordedByUserId;
+
+    // QA hardening 2026-09-18: money fields on Confirmed/Refunded rows are
+    // immutable (otherwise the LBP-hold path below could force a Confirmed
+    // row back to Pending and silently erase revenue). Refund + re-record.
+    if ((payment.status === 'Confirmed' || payment.status === 'Refunded') &&
+        (updateData.amount !== undefined || updateData.currency !== undefined || updateData.exchangeRate !== undefined)) {
+      return res.status(400).json({ message: `Cannot edit money fields on a ${payment.status} payment (refund and re-record instead).` });
+    }
 
     // PHASE 2 (D10/D11): guarded recompute — never divide by zero/missing.
     if (updateData.amount !== undefined || updateData.currency !== undefined || updateData.exchangeRate !== undefined) {
       const amount = updateData.amount !== undefined ? Number(updateData.amount) : Number(payment.amount);
       const currency = updateData.currency || payment.currency;
       const exchangeRate = updateData.exchangeRate !== undefined ? Number(updateData.exchangeRate) : Number(payment.exchangeRate);
-      if (!Number.isFinite(amount) || amount < 0) {
-        return res.status(400).json({ message: 'Payment amount must be a non-negative number' });
+      if (!Number.isFinite(amount) || amount <= 0) {
+        return res.status(400).json({ message: 'Payment amount must be a positive number' });
       }
       if (currency === 'LBP') {
         if (!Number.isFinite(exchangeRate) || exchangeRate <= 0) {
@@ -165,7 +220,7 @@ exports.updatePayment = async (req, res) => {
 
     res.status(200).json(updatedPayment);
   } catch (error) {
-    res.status(400).json({ message: 'Error updating payment', error: error.message });
+    res.status(400).json({ message: 'Error updating payment', ...require('../utils/http').safeError(error) });
   }
 };
 
@@ -179,7 +234,7 @@ exports.deletePayment = async (req, res) => {
     // through updatePayment status change.
     return res.status(403).json({ message: 'Payments cannot be deleted (void-only). Set status to Rejected/Refunded instead (D21).' });
   } catch (error) {
-    res.status(500).json({ message: 'Error deleting payment', error: error.message });
+    res.status(500).json({ message: 'Error deleting payment', ...require('../utils/http').safeError(error) });
   }
 };
 
@@ -232,7 +287,7 @@ exports.getDealPaymentSummary = async (req, res) => {
       }
     });
   } catch (error) {
-    res.status(500).json({ message: 'Error fetching payment summary', error: error.message });
+    res.status(500).json({ message: 'Error fetching payment summary', ...require('../utils/http').safeError(error) });
   }
 };
 
@@ -252,7 +307,7 @@ exports.getAllPaymentPlans = async (req, res) => {
 
     res.status(200).json(paymentPlans);
   } catch (error) {
-    res.status(500).json({ message: 'Error fetching payment plans', error: error.message });
+    res.status(500).json({ message: 'Error fetching payment plans', ...require('../utils/http').safeError(error) });
   }
 };
 
@@ -274,7 +329,7 @@ exports.getPaymentPlanById = async (req, res) => {
 
     res.status(200).json({ ...plan.toJSON(), payments });
   } catch (error) {
-    res.status(500).json({ message: 'Error fetching payment plan', error: error.message });
+    res.status(500).json({ message: 'Error fetching payment plan', ...require('../utils/http').safeError(error) });
   }
 };
 
@@ -284,6 +339,30 @@ exports.createPaymentPlan = async (req, res) => {
       dealId, planName, totalAmount, currency, numberOfInstallments,
       startDate, endDate, installmentAmount, notes
     } = req.body;
+
+    // QA 2026-09-18: plans previously trusted every numeric/date blindly
+    // (negative totals, NaN installments persisted).
+    const total = Number(totalAmount);
+    if (!Number.isFinite(total) || total <= 0) {
+      return res.status(400).json({ message: 'Plan total amount must be a positive number' });
+    }
+    const count = Number(numberOfInstallments);
+    if (!Number.isInteger(count) || count <= 0 || count > 360) {
+      return res.status(400).json({ message: 'Number of installments must be an integer between 1 and 360' });
+    }
+    if (installmentAmount !== undefined && installmentAmount !== null && installmentAmount !== '') {
+      const inst = Number(installmentAmount);
+      if (!Number.isFinite(inst) || inst <= 0) {
+        return res.status(400).json({ message: 'Installment amount must be a positive number' });
+      }
+    }
+    if (startDate && endDate && new Date(startDate) > new Date(endDate)) {
+      return res.status(400).json({ message: 'Plan start date cannot be after end date' });
+    }
+    if (dealId) {
+      const deal = await Deal.findByPk(dealId);
+      if (!deal) return res.status(404).json({ message: 'Deal not found' });
+    }
 
     const plan = await PaymentPlan.create({
       dealId,
@@ -301,7 +380,7 @@ exports.createPaymentPlan = async (req, res) => {
 
     res.status(201).json(plan);
   } catch (error) {
-    res.status(400).json({ message: 'Error creating payment plan', error: error.message });
+    res.status(400).json({ message: 'Error creating payment plan', ...require('../utils/http').safeError(error) });
   }
 };
 
@@ -310,7 +389,14 @@ exports.updatePaymentPlan = async (req, res) => {
     const plan = await PaymentPlan.findByPk(req.params.id);
     if (!plan) return res.status(404).json({ message: 'Payment plan not found' });
 
-    await plan.update(req.body);
+    // QA hardening 2026-09-18: plans cannot be reparented to another deal
+    // and authorship/PK are immutable (no UI calls this path — verified).
+    const PLAN_FIELDS = ['planName', 'totalAmount', 'currency', 'numberOfInstallments', 'startDate', 'endDate', 'installmentAmount', 'status', 'notes'];
+    const planData = {};
+    for (const f of PLAN_FIELDS) {
+      if (req.body && req.body[f] !== undefined) planData[f] = req.body[f];
+    }
+    await plan.update(planData);
 
     const updatedPlan = await PaymentPlan.findByPk(plan.id, {
       include: [
@@ -320,7 +406,7 @@ exports.updatePaymentPlan = async (req, res) => {
 
     res.status(200).json(updatedPlan);
   } catch (error) {
-    res.status(400).json({ message: 'Error updating payment plan', error: error.message });
+    res.status(400).json({ message: 'Error updating payment plan', ...require('../utils/http').safeError(error) });
   }
 };
 
@@ -332,7 +418,7 @@ exports.deletePaymentPlan = async (req, res) => {
     await plan.destroy();
     res.status(200).json({ message: 'Payment plan deleted successfully' });
   } catch (error) {
-    res.status(500).json({ message: 'Error deleting payment plan', error: error.message });
+    res.status(500).json({ message: 'Error deleting payment plan', ...require('../utils/http').safeError(error) });
   }
 };
 
@@ -379,6 +465,6 @@ exports.getCashTracking = async (req, res) => {
       }
     });
   } catch (error) {
-    res.status(500).json({ message: 'Error fetching cash tracking', error: error.message });
+    res.status(500).json({ message: 'Error fetching cash tracking', ...require('../utils/http').safeError(error) });
   }
 };

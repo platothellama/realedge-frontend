@@ -25,7 +25,7 @@ exports.getTasks = async (req, res) => {
 
     res.status(200).json(tasks);
   } catch (error) {
-    res.status(500).json({ message: 'Error fetching tasks', error: error.message });
+    res.status(500).json({ message: 'Error fetching tasks', ...require('../utils/http').safeError(error) });
   }
 };
 
@@ -47,19 +47,23 @@ exports.getMyTasks = async (req, res) => {
 
     res.status(200).json(tasks);
   } catch (error) {
-    res.status(500).json({ message: 'Error fetching tasks', error: error.message });
+    res.status(500).json({ message: 'Error fetching tasks', ...require('../utils/http').safeError(error) });
   }
 };
 
 exports.createTask = async (req, res) => {
   try {
+    // QA hardening 2026-09-18: tasks are born todo; completedAt is
+    // server-managed on the →completed transition (updateTask).
+    const { status, completedAt, ...body } = req.body || {};
     const task = await Task.create({
-      ...req.body,
+      ...body,
+      status: 'todo',
       assignedByUserId: req.user.id
     });
     res.status(201).json(task);
   } catch (error) {
-    res.status(400).json({ message: 'Error creating task', error: error.message });
+    res.status(400).json({ message: 'Error creating task', ...require('../utils/http').safeError(error) });
   }
 };
 
@@ -75,13 +79,17 @@ exports.updateTask = async (req, res) => {
 
     const oldStatus = task.status;
 
-    if (req.body.status === 'completed' && task.status !== 'completed') {
-      req.body.completedAt = new Date();
+    // QA hardening 2026-09-18: attribution and timestamps are server-managed.
+    const updateData = { ...(req.body || {}) };
+    delete updateData.assignedByUserId;
+    delete updateData.completedAt;
+    if (updateData.status === 'completed' && task.status !== 'completed') {
+      updateData.completedAt = new Date();
     }
 
-    await task.update(req.body);
+    await task.update(updateData);
 
-    if (req.body.status === 'review' && oldStatus !== 'review' && task.assignedToUserId) {
+    if (updateData.status === 'review' && oldStatus !== 'review' && task.assignedToUserId) {
       await Notification.create({
         userId: task.assignedToUserId,
         title: 'Task Ready for Review',
@@ -91,7 +99,7 @@ exports.updateTask = async (req, res) => {
       });
     }
 
-    if (req.body.status === 'completed' && oldStatus !== 'completed' && task.assignedByUserId) {
+    if (updateData.status === 'completed' && oldStatus !== 'completed' && task.assignedByUserId) {
       await Notification.create({
         userId: task.assignedByUserId,
         title: 'Task Completed',
@@ -110,7 +118,7 @@ exports.updateTask = async (req, res) => {
 
     res.status(200).json(updatedTask);
   } catch (error) {
-    res.status(400).json({ message: 'Error updating task', error: error.message });
+    res.status(400).json({ message: 'Error updating task', ...require('../utils/http').safeError(error) });
   }
 };
 
@@ -122,7 +130,7 @@ exports.deleteTask = async (req, res) => {
     await task.destroy();
     res.status(200).json({ message: 'Task deleted' });
   } catch (error) {
-    res.status(500).json({ message: 'Error deleting task', error: error.message });
+    res.status(500).json({ message: 'Error deleting task', ...require('../utils/http').safeError(error) });
   }
 };
 
@@ -157,6 +165,6 @@ exports.getTaskStats = async (req, res) => {
       pending: total - completed
     });
   } catch (error) {
-    res.status(500).json({ message: 'Error fetching task stats', error: error.message });
+    res.status(500).json({ message: 'Error fetching task stats', ...require('../utils/http').safeError(error) });
   }
 };

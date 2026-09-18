@@ -58,6 +58,7 @@ describe('bootMigrate covers Phase-2 schema drift (BUG-001)', () => {
       Expenses: 'expense', Transactions: 'transaction',
       TransactionWorkflows: 'transactionWorkflow', Payments: 'payment',
       PaymentPlans: 'paymentPlan', Users: 'user', DealCommissions: 'dealCommission',
+      Properties: 'property',
     };
     for (const [table, column] of boot.REQUIRED_COLUMNS) {
       let attrs;

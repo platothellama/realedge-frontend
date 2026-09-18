@@ -21,7 +21,7 @@ exports.getAllGroups = async (req, res) => {
 
     res.status(200).json({ status: 'success', data: groupsWithMembers });
   } catch (error) {
-    res.status(500).json({ status: 'error', message: 'Error fetching groups', error: error.message });
+    res.status(500).json({ status: 'error', message: 'Error fetching groups', ...require('../utils/http').safeError(error) });
   }
 };
 
@@ -48,7 +48,7 @@ exports.createGroup = async (req, res) => {
     
     res.status(201).json({ status: 'success', data: { ...group.toJSON(), members } });
   } catch (error) {
-    res.status(400).json({ status: 'fail', message: 'Error creating group', error: error.message });
+    res.status(400).json({ status: 'fail', message: 'Error creating group', ...require('../utils/http').safeError(error) });
   }
 };
 
@@ -81,7 +81,7 @@ exports.updateGroup = async (req, res) => {
 
     res.status(200).json({ status: 'success', data: { ...group.toJSON(), members } });
   } catch (error) {
-    res.status(400).json({ status: 'fail', message: 'Error updating group', error: error.message });
+    res.status(400).json({ status: 'fail', message: 'Error updating group', ...require('../utils/http').safeError(error) });
   }
 };
 
@@ -105,7 +105,7 @@ exports.deleteGroup = async (req, res) => {
     await group.destroy();
     res.status(200).json({ status: 'success', message: 'Group deleted successfully' });
   } catch (error) {
-    res.status(500).json({ status: 'error', message: 'Error deleting group', error: error.message });
+    res.status(500).json({ status: 'error', message: 'Error deleting group', ...require('../utils/http').safeError(error) });
   }
 };
 
@@ -127,7 +127,7 @@ exports.addGroupMember = async (req, res) => {
     await UserGroup.create({ userId, groupId, role: 'agent' });
     res.status(200).json({ status: 'success', message: 'Member added to group' });
   } catch (error) {
-    res.status(400).json({ status: 'fail', message: 'Error adding group member', error: error.message });
+    res.status(400).json({ status: 'fail', message: 'Error adding group member', ...require('../utils/http').safeError(error) });
   }
 };
 
@@ -150,7 +150,7 @@ exports.getGroupStats = async (req, res) => {
       groups: groupStats
     });
   } catch (error) {
-    res.status(500).json({ status: 'error', message: 'Error fetching group stats', error: error.message });
+    res.status(500).json({ status: 'error', message: 'Error fetching group stats', ...require('../utils/http').safeError(error) });
   }
 };
 
@@ -238,7 +238,7 @@ exports.addUserToGroup = async (req, res) => {
       data: result
     });
   } catch (error) {
-    res.status(400).json({ status: 'fail', message: 'Error adding user to group', error: error.message });
+    res.status(400).json({ status: 'fail', message: 'Error adding user to group', ...require('../utils/http').safeError(error) });
   }
 };
 
@@ -275,7 +275,7 @@ exports.removeUserFromGroup = async (req, res) => {
       message: 'User removed from group'
     });
   } catch (error) {
-    res.status(400).json({ status: 'fail', message: 'Error removing user from group', error: error.message });
+    res.status(400).json({ status: 'fail', message: 'Error removing user from group', ...require('../utils/http').safeError(error) });
   }
 };
 
@@ -368,7 +368,7 @@ exports.updateGroupRoles = async (req, res) => {
       data: updatedMembers
     });
   } catch (error) {
-    res.status(400).json({ status: 'fail', message: 'Error updating group roles', error: error.message });
+    res.status(400).json({ status: 'fail', message: 'Error updating group roles', ...require('../utils/http').safeError(error) });
   }
 };
 
@@ -397,6 +397,6 @@ exports.getGroupMembers = async (req, res) => {
       }
     });
   } catch (error) {
-    res.status(500).json({ status: 'error', message: 'Error fetching group members', error: error.message });
+    res.status(500).json({ status: 'error', message: 'Error fetching group members', ...require('../utils/http').safeError(error) });
   }
 };

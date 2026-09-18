@@ -48,7 +48,7 @@ exports.propertyValuation = async (req, res) => {
 
     res.status(200).json(valuation);
   } catch (error) {
-    res.status(500).json({ message: 'Error in valuation', error: error.message });
+    res.status(500).json({ message: 'Error in valuation', ...require('../utils/http').safeError(error) });
   }
 };
 
@@ -98,7 +98,7 @@ exports.marketAnalysis = async (req, res) => {
       closedDeals: soldDeals.length
     });
   } catch (error) {
-    res.status(500).json({ message: 'Error in market analysis', error: error.message });
+    res.status(500).json({ message: 'Error in market analysis', ...require('../utils/http').safeError(error) });
   }
 };
 
@@ -145,7 +145,7 @@ exports.leadScoring = async (req, res) => {
       recommendation
     });
   } catch (error) {
-    res.status(500).json({ message: 'Error in lead scoring', error: error.message });
+    res.status(500).json({ message: 'Error in lead scoring', ...require('../utils/http').safeError(error) });
   }
 };
 
@@ -172,7 +172,7 @@ Features: ${property.features?.join(', ') || 'N/A'}`;
 
     res.status(200).json({ description });
   } catch (error) {
-    res.status(500).json({ message: 'Error generating description', error: error.message });
+    res.status(500).json({ message: 'Error generating description', ...require('../utils/http').safeError(error) });
   }
 };
 
@@ -199,7 +199,7 @@ exports.generateMarketingContent = async (req, res) => {
 
     res.status(200).json({ content: completion.choices[0].message.content });
   } catch (error) {
-    res.status(500).json({ message: 'Error generating content', error: error.message });
+    res.status(500).json({ message: 'Error generating content', ...require('../utils/http').safeError(error) });
   }
 };
 
@@ -240,7 +240,7 @@ exports.predictiveAnalytics = async (req, res) => {
       predictions
     });
   } catch (error) {
-    res.status(500).json({ message: 'Error in predictive analytics', error: error.message });
+    res.status(500).json({ message: 'Error in predictive analytics', ...require('../utils/http').safeError(error) });
   }
 };
 
@@ -317,7 +317,7 @@ exports.getAllLeadScores = async (req, res) => {
       }
     });
   } catch (error) {
-    res.status(500).json({ message: 'Error fetching lead scores', error: error.message });
+    res.status(500).json({ message: 'Error fetching lead scores', ...require('../utils/http').safeError(error) });
   }
 };
 
@@ -385,7 +385,7 @@ exports.getAllPropertyValuations = async (req, res) => {
       }
     });
   } catch (error) {
-    res.status(500).json({ message: 'Error fetching property valuations', error: error.message });
+    res.status(500).json({ message: 'Error fetching property valuations', ...require('../utils/http').safeError(error) });
   }
 };
 
@@ -537,7 +537,7 @@ exports.getAiInsights = async (req, res) => {
       }
     });
   } catch (error) {
-    res.status(500).json({ message: 'Error fetching AI insights', error: error.message });
+    res.status(500).json({ message: 'Error fetching AI insights', ...require('../utils/http').safeError(error) });
   }
 };
 
@@ -629,7 +629,7 @@ Provide a brief recommendation for the agent.`
       aiAnalysis
     });
   } catch (error) {
-    res.status(500).json({ message: 'Error matching properties', error: error.message });
+    res.status(500).json({ message: 'Error matching properties', ...require('../utils/http').safeError(error) });
   }
 };
 
@@ -735,7 +735,7 @@ Features: ${property.features?.join(', ') || 'N/A'}
       generated: results
     });
   } catch (error) {
-    res.status(500).json({ message: 'Error generating listing', error: error.message });
+    res.status(500).json({ message: 'Error generating listing', ...require('../utils/http').safeError(error) });
   }
 };
 
@@ -802,7 +802,7 @@ Status: ${lead.status}
       generated: generatedContent
     });
   } catch (error) {
-    res.status(500).json({ message: 'Error generating communication', error: error.message });
+    res.status(500).json({ message: 'Error generating communication', ...require('../utils/http').safeError(error) });
   }
 };
 
@@ -867,7 +867,7 @@ exports.generateMarketReport = async (req, res) => {
       report
     });
   } catch (error) {
-    res.status(500).json({ message: 'Error generating market report', error: error.message });
+    res.status(500).json({ message: 'Error generating market report', ...require('../utils/http').safeError(error) });
   }
 };
 
@@ -954,7 +954,7 @@ exports.getInvestmentRecommendations = async (req, res) => {
       aiAnalysis
     });
   } catch (error) {
-    res.status(500).json({ message: 'Error getting investment recommendations', error: error.message });
+    res.status(500).json({ message: 'Error getting investment recommendations', ...require('../utils/http').safeError(error) });
   }
 };
 
@@ -1112,6 +1112,6 @@ exports.aiAssistant = async (req, res) => {
 
     res.status(200).json({ message, response, data: { properties: propertyResults, leads: leadResults, deals: dealResults, revenue: revenueResults, summary } });
   } catch (error) {
-    res.status(500).json({ message: 'Error with AI assistant', error: error.message });
+    res.status(500).json({ message: 'Error with AI assistant', ...require('../utils/http').safeError(error) });
   }
 };

@@ -33,6 +33,7 @@ const trackRoutes = require('./routes/trackRoutes');
 const adminRoutes = require('./routes/adminRoutes');
 const featureFlagRoutes = require('./routes/featureFlagRoutes');
 const paymentRoutes = require('./routes/paymentRoutes');
+const projectRoutes = require('./routes/projectRoutes');
 const publicDocumentRoutes = require('./routes/publicDocumentRoutes');
 const commissionSettingsRoutes = require('./routes/commissionSettingsRoutes');
 const upload = require('./middleware/uploadMiddleware');
@@ -45,9 +46,31 @@ const PORT = process.env.PORT || 8000;
 // PHASE 1 (production hardening): secure defaults without changing API behavior.
 app.set('trust proxy', 1); // Render/Heroku-style proxies: correct req.ip for throttling/logs.
 
-// TEMP-DEV: allow all origins. TODO: re-lock to FRONTEND_URL allowlist before prod.
-// app.use(cors()) reflects any Origin — do NOT ship this to production with credentials.
-app.use(cors());
+// CORS allowlist (QA hardening 2026-09-18). FRONTEND_URL may be a
+// comma-separated list, e.g. "https://app.example.com,https://admin.example.com".
+// Dev (no FRONTEND_URL set, non-production): allow all for local testing.
+const frontendAllowlist = (process.env.FRONTEND_URL || '')
+  .split(',')
+  .map((s) => s.trim())
+  .filter(Boolean);
+const corsOptions =
+  frontendAllowlist.length > 0
+    ? {
+        origin: (origin, cb) => {
+          // Same-origin / curl / mobile clients send no Origin: allow.
+          if (!origin || frontendAllowlist.includes(origin)) return cb(null, true);
+          return cb(new Error('CORS origin not allowed'));
+        },
+        credentials: true,
+      }
+    : process.env.NODE_ENV === 'production'
+      ? {
+          // Production with no allowlist configured: safest default is to
+          // reflect nothing (no CORS headers) rather than allow-all.
+          origin: false,
+        }
+      : {};
+app.use(cors(corsOptions));
 
 // Security headers. API serves JSON (plus the SPA bundle in production),
 // so keep policies permissive for cross-origin reads:
@@ -101,14 +124,25 @@ const authLimiter = rateLimit({
   legacyHeaders: false,
   message: { status: 'fail', message: 'Too many auth attempts, please try again later.' }
 });
-const aiLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 30,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { status: 'fail', message: 'AI quota exceeded for now, please try again later.' }
-});
 app.use('/api/', apiLimiter);
+
+// QA hardening 2026-09-18 (defense in depth): in production, strip any raw
+// `error` field from JSON API responses — controllers are migrated to
+// safeError() individually, but this guarantees no Sequelize/SQL/stack text
+// can leak through a missed site or future code.
+if (process.env.NODE_ENV === 'production') {
+  app.use('/api', (req, res, next) => {
+    const json = res.json.bind(res);
+    res.json = (body) => {
+      if (body && typeof body === 'object' && !Array.isArray(body) && 'error' in body) {
+        const { error, ...rest } = body;
+        return json(rest);
+      }
+      return json(body);
+    };
+    next();
+  });
+}
 
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
@@ -117,6 +151,7 @@ app.use('/api/auth', authLimiter, authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/groups', groupRoutes);
 app.use('/api/properties', propertyRoutes);
+app.use('/api/projects', projectRoutes);
 app.use('/api/sellers', sellerRoutes);
 app.use('/api/leads', leadRoutes);
 app.use('/api/deals', dealRoutes);
@@ -131,7 +166,7 @@ app.use('/api/commissions', commissionRoutes);
 app.use('/api/market', marketRoutes);
 app.use('/api/transactions', transactionRoutes);
 app.use('/api/announcements', announcementRoutes);
-app.use('/api/ai', aiLimiter, aiRoutes);
+app.use('/api/ai', aiRoutes);
 app.use('/api/buyer-preferences', buyerPreferenceRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/operations', operationsRoutes);
@@ -142,6 +177,8 @@ app.use('/api/features', featureFlagRoutes);
 app.use('/api/payments', paymentRoutes);
 app.use('/api/sign', publicDocumentRoutes);
 app.use('/api/commission-settings', commissionSettingsRoutes);
+// NOTE: /api/ai carries its own per-user throttle inside aiRoutes (after
+// auth, so quota is keyed by user, not by shared NAT IP).
 
 // Direct Upload Route (Fallback) - Supabase persistent storage
 app.post('/api/properties/upload', protect, upload.single('image'), async (req, res) => {

@@ -1,4 +1,5 @@
 const { Invoice, Deal, Property, User } = require('../models/associations');
+const { Op } = require('sequelize');
 
 exports.getInvoices = async (req, res) => {
   try {
@@ -9,7 +10,7 @@ exports.getInvoices = async (req, res) => {
     if (type) where.type = type;
     if (startDate && endDate) {
       where.issueDate = {
-        between: [new Date(startDate), new Date(endDate)]
+        [Op.between]: [new Date(startDate), new Date(endDate)]
       };
     }
 
@@ -24,7 +25,7 @@ exports.getInvoices = async (req, res) => {
 
     res.status(200).json(invoices);
   } catch (error) {
-    res.status(500).json({ message: 'Error fetching invoices', error: error.message });
+    res.status(500).json({ message: 'Error fetching invoices', ...require('../utils/http').safeError(error) });
   }
 };
 
@@ -70,6 +71,10 @@ async function nextInvoiceNumber() {
 exports.createInvoice = async (req, res) => {
   try {
     const invoiceData = { ...req.body };
+    // QA 2026-09-18: PK/timestamps never client-settable.
+    for (const f of ['id', 'createdAt', 'updatedAt']) {
+      delete invoiceData[f];
+    }
 
     invoiceData.invoiceNumber = await nextInvoiceNumber();
 
@@ -92,12 +97,15 @@ exports.createInvoice = async (req, res) => {
     }
     invoiceData.taxAmount = invoiceData.subtotal * (rate / 100);
     invoiceData.total = invoiceData.subtotal + invoiceData.taxAmount - invoiceData.discount;
-    if (invoiceData.paidAmount === undefined) invoiceData.paidAmount = 0;
+    // QA hardening 2026-09-18: invoices are born Draft with nothing paid;
+    // Paid/Cancelled must come from the paid/cancel flows.
+    invoiceData.status = 'Draft';
+    invoiceData.paidAmount = 0;
 
     const invoice = await Invoice.create(invoiceData);
     res.status(201).json(invoice);
   } catch (error) {
-    res.status(500).json({ message: 'Error creating invoice', error: error.message });
+    res.status(500).json({ message: 'Error creating invoice', ...require('../utils/http').safeError(error) });
   }
 };
 
@@ -107,17 +115,58 @@ exports.updateInvoice = async (req, res) => {
     if (!invoice) return res.status(404).json({ message: 'Invoice not found' });
 
     const updateData = { ...req.body };
-    
+    for (const f of ['id', 'createdAt', 'updatedAt']) {
+      delete updateData[f];
+    }
+    // QA hardening 2026-09-18: money/identity fields are server-computed.
+    // Without lineItems the old code trusted client totals outright;
+    // paidAmount must flow through the paid endpoint, never a plain PUT.
+    delete updateData.subtotal;
+    delete updateData.taxAmount;
+    delete updateData.total;
+    delete updateData.paidAmount;
+    delete updateData.invoiceNumber;
+    if (updateData.taxRate !== undefined) {
+      const r = Number(updateData.taxRate);
+      if (!Number.isFinite(r) || r < 0 || r > 100) {
+        return res.status(400).json({ message: 'taxRate must be between 0 and 100' });
+      }
+      updateData.taxRate = r;
+    }
+
+    // QA hardening 2026-09-18: Paid flows through the paid endpoint only
+    // (paidAmount reconciliation); Paid/Cancelled are terminal via PUT.
+    if (updateData.status !== undefined) {
+      if (updateData.status === 'Paid') {
+        return res.status(403).json({ message: 'Use the paid endpoint to record invoice payments.' });
+      }
+      if (invoice.status === 'Paid' || invoice.status === 'Cancelled') {
+        return res.status(403).json({ message: `${invoice.status} invoices cannot change status via update.` });
+      }
+    }
+
     if (updateData.lineItems && Array.isArray(updateData.lineItems)) {
       updateData.subtotal = updateData.lineItems.reduce((sum, item) => sum + (Number(item.total) || 0), 0);
-      updateData.taxAmount = updateData.subtotal * (updateData.taxRate / 100);
-      updateData.total = updateData.subtotal + updateData.taxAmount - (updateData.discount || 0);
+      // QA hardening 2026-09-18: same guards as create (effective rate falls
+      // back to the stored one; discount bounded so totals can't go negative).
+      const rate = updateData.taxRate !== undefined ? updateData.taxRate : Number(invoice.taxRate);
+      if (!Number.isFinite(rate) || rate < 0 || rate > 100) {
+        return res.status(400).json({ message: 'taxRate must be between 0 and 100' });
+      }
+      updateData.taxRate = rate;
+      const discount = updateData.discount !== undefined ? Number(updateData.discount) : Number(invoice.discount || 0);
+      if (!Number.isFinite(discount) || discount < 0 || discount > updateData.subtotal + (updateData.subtotal * rate / 100)) {
+        return res.status(400).json({ message: 'Discount cannot be negative or exceed the taxed subtotal' });
+      }
+      updateData.discount = discount;
+      updateData.taxAmount = updateData.subtotal * (rate / 100);
+      updateData.total = updateData.subtotal + updateData.taxAmount - discount;
     }
 
     await invoice.update(updateData);
     res.status(200).json(invoice);
   } catch (error) {
-    res.status(500).json({ message: 'Error updating invoice', error: error.message });
+    res.status(500).json({ message: 'Error updating invoice', ...require('../utils/http').safeError(error) });
   }
 };
 
@@ -150,7 +199,7 @@ exports.markAsPaid = async (req, res) => {
 
     res.status(200).json(invoice);
   } catch (error) {
-    res.status(500).json({ message: 'Error marking invoice as paid', error: error.message });
+    res.status(500).json({ message: 'Error marking invoice as paid', ...require('../utils/http').safeError(error) });
   }
 };
 
@@ -168,7 +217,7 @@ exports.deleteInvoice = async (req, res) => {
     await invoice.destroy();
     res.status(200).json({ message: 'Invoice deleted' });
   } catch (error) {
-    res.status(500).json({ message: 'Error deleting invoice', error: error.message });
+    res.status(500).json({ message: 'Error deleting invoice', ...require('../utils/http').safeError(error) });
   }
 };
 
@@ -251,6 +300,6 @@ exports.getInvoiceStats = async (req, res) => {
       byType: byType.map(t => ({ type: t.type, total: Number(t.dataValues.total), count: Number(t.dataValues.count) }))
     });
   } catch (error) {
-    res.status(500).json({ message: 'Error fetching invoice stats', error: error.message });
+    res.status(500).json({ message: 'Error fetching invoice stats', ...require('../utils/http').safeError(error) });
   }
 };

@@ -58,6 +58,6 @@ exports.generateMarketingContent = async (req, res) => {
     res.status(200).json({ content });
   } catch (error) {
     console.error('OpenAI Error:', error);
-    res.status(500).json({ message: 'Error generating content', error: error.message });
+    res.status(500).json({ message: 'Error generating content', ...require('../utils/http').safeError(error) });
   }
 };

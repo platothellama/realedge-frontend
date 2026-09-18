@@ -10,7 +10,7 @@ exports.getNotifications = async (req, res) => {
     });
     res.status(200).json(notifications);
   } catch (error) {
-    res.status(500).json({ message: 'Error fetching notifications', error: error.message });
+    res.status(500).json({ message: 'Error fetching notifications', ...require('../utils/http').safeError(error) });
   }
 };
 
@@ -22,7 +22,7 @@ exports.getUnreadCount = async (req, res) => {
     });
     res.status(200).json({ unreadCount: count });
   } catch (error) {
-    res.status(500).json({ message: 'Error fetching count', error: error.message });
+    res.status(500).json({ message: 'Error fetching count', ...require('../utils/http').safeError(error) });
   }
 };
 
@@ -44,7 +44,7 @@ exports.markAsRead = async (req, res) => {
 
     res.status(200).json(notification);
   } catch (error) {
-    res.status(500).json({ message: 'Error marking notification', error: error.message });
+    res.status(500).json({ message: 'Error marking notification', ...require('../utils/http').safeError(error) });
   }
 };
 
@@ -58,7 +58,7 @@ exports.markAllAsRead = async (req, res) => {
 
     res.status(200).json({ message: 'All notifications marked as read' });
   } catch (error) {
-    res.status(500).json({ message: 'Error marking notifications', error: error.message });
+    res.status(500).json({ message: 'Error marking notifications', ...require('../utils/http').safeError(error) });
   }
 };
 
@@ -76,7 +76,7 @@ exports.deleteNotification = async (req, res) => {
     await notification.destroy();
     res.status(200).json({ message: 'Notification deleted' });
   } catch (error) {
-    res.status(500).json({ message: 'Error deleting notification', error: error.message });
+    res.status(500).json({ message: 'Error deleting notification', ...require('../utils/http').safeError(error) });
   }
 };
 

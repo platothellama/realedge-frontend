@@ -388,7 +388,7 @@ exports.getStats = async (req, res) => {
     res.status(200).json(stats);
   } catch (error) {
     console.error('Dashboard stats error:', error);
-    res.status(500).json({ message: 'Error fetching stats', error: error.message });
+    res.status(500).json({ message: 'Error fetching stats', ...require('../utils/http').safeError(error) });
   }
 };
 

@@ -17,6 +17,22 @@ const {
 
 router.use(protect);
 
+// QA hardening 2026-09-18: Seller has only benign columns; never accept
+// anything else (id overwrite, timestamps, or future sensitive columns).
+const SELLER_FIELDS = ['name', 'email', 'phone', 'address', 'city', 'country', 'notes'];
+const pickSeller = (body) => {
+  const out = {};
+  for (const f of SELLER_FIELDS) {
+    if (body && body[f] !== undefined) out[f] = body[f];
+  }
+  // Empty-string email fails Sequelize isEmail (allowNull only skips null).
+  // Normalize "" / whitespace to null (= "no email", allows clearing).
+  if (typeof out.email === 'string') {
+    out.email = out.email.trim() || null;
+  }
+  return out;
+};
+
 router.get('/', async (req, res) => {
   try {
     const sellers = await Seller.findAll({
@@ -31,7 +47,7 @@ router.get('/', async (req, res) => {
     });
     res.status(200).json(sellers);
   } catch (error) {
-    res.status(500).json({ message: 'Error fetching sellers', error: error.message });
+    res.status(500).json({ message: 'Error fetching sellers', ...require('../utils/http').safeError(error) });
   }
 });
 
@@ -64,7 +80,7 @@ router.get('/:id/stats', async (req, res) => {
       outstandingAmount: totalInvoiced - totalPaid
     });
   } catch (error) {
-    res.status(500).json({ message: 'Error fetching seller stats', error: error.message });
+    res.status(500).json({ message: 'Error fetching seller stats', ...require('../utils/http').safeError(error) });
   }
 });
 
@@ -102,16 +118,16 @@ router.get('/:id', async (req, res) => {
     if (!seller) return res.status(404).json({ message: 'Seller not found' });
     res.status(200).json(seller);
   } catch (error) {
-    res.status(500).json({ message: 'Error fetching seller', error: error.message });
+    res.status(500).json({ message: 'Error fetching seller', ...require('../utils/http').safeError(error) });
   }
 });
 
 router.post('/', async (req, res) => {
   try {
-    const seller = await Seller.create(req.body);
+    const seller = await Seller.create(pickSeller(req.body));
     res.status(201).json(seller);
   } catch (error) {
-    res.status(400).json({ message: 'Error creating seller', error: error.message });
+    res.status(400).json({ message: 'Error creating seller', ...require('../utils/http').safeError(error) });
   }
 });
 
@@ -120,10 +136,10 @@ router.put('/:id', async (req, res) => {
     const seller = await Seller.findByPk(req.params.id);
     if (!seller) return res.status(404).json({ message: 'Seller not found' });
 
-    await seller.update(req.body);
+    await seller.update(pickSeller(req.body));
     res.status(200).json(seller);
   } catch (error) {
-    res.status(400).json({ message: 'Error updating seller', error: error.message });
+    res.status(400).json({ message: 'Error updating seller', ...require('../utils/http').safeError(error) });
   }
 });
 

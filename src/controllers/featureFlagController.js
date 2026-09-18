@@ -1,5 +1,6 @@
 const FeatureFlag = require('../models/featureFlag');
 const { Op } = require('sequelize');
+const { safeError } = require('../utils/http');
 
 exports.getAllFeatureFlags = async (req, res) => {
   try {
@@ -8,7 +9,7 @@ exports.getAllFeatureFlags = async (req, res) => {
     });
     res.status(200).json({ status: 'success', data: flags });
   } catch (err) {
-    res.status(500).json({ status: 'fail', message: err.message });
+    res.status(500).json({ status: 'fail', message: 'Error fetching feature flags', ...safeError(err) });
   }
 };
 
@@ -22,7 +23,7 @@ exports.createFeatureFlag = async (req, res) => {
     const flag = await FeatureFlag.create({ key, description, enabled, enabledForRoles });
     res.status(201).json({ status: 'success', data: flag });
   } catch (err) {
-    res.status(500).json({ status: 'fail', message: err.message });
+    res.status(500).json({ status: 'fail', message: 'Error creating feature flag', ...safeError(err) });
   }
 };
 
@@ -37,7 +38,7 @@ exports.updateFeatureFlag = async (req, res) => {
     await flag.update({ key, description, enabled, enabledForRoles });
     res.status(200).json({ status: 'success', data: flag });
   } catch (err) {
-    res.status(500).json({ status: 'fail', message: err.message });
+    res.status(500).json({ status: 'fail', message: 'Error updating feature flag', ...safeError(err) });
   }
 };
 
@@ -52,7 +53,7 @@ exports.toggleFeatureFlag = async (req, res) => {
     await flag.save();
     res.status(200).json({ status: 'success', data: flag });
   } catch (err) {
-    res.status(500).json({ status: 'fail', message: err.message });
+    res.status(500).json({ status: 'fail', message: 'Error toggling feature flag', ...safeError(err) });
   }
 };
 
@@ -64,9 +65,9 @@ exports.deleteFeatureFlag = async (req, res) => {
       return res.status(404).json({ status: 'fail', message: 'Feature flag not found' });
     }
     await flag.destroy();
-    res.status(204).json({ status: 'success' });
+    res.status(200).json({ status: 'success', message: 'Feature flag deleted' });
   } catch (err) {
-    res.status(500).json({ status: 'fail', message: err.message });
+    res.status(500).json({ status: 'fail', message: 'Error deleting feature flag', ...safeError(err) });
   }
 };
 
@@ -84,6 +85,6 @@ exports.getEnabledFeatures = async (req, res) => {
     }, {});
     res.status(200).json({ status: 'success', data: features });
   } catch (err) {
-    res.status(500).json({ status: 'fail', message: err.message });
+    res.status(500).json({ status: 'fail', message: 'Error fetching enabled features', ...safeError(err) });
   }
 };

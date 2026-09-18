@@ -11,9 +11,12 @@ const signingRateLimiter = rateLimit({
   legacyHeaders: false
 });
 
-router.get('/:documentId/:token', documentController.getPublicSigningData);
-router.post('/:documentId/:token', signingRateLimiter, documentController.processPublicSignature);
+// QA hardening 2026-09-18: static paths FIRST. Express matches in
+// registration order, so '/:documentId/:token' previously shadowed
+// '/:documentId/compliance-disclosures' and '/:documentId/:token/verify-email'.
 router.get('/:documentId/compliance-disclosures', documentController.getComplianceDisclosures);
 router.post('/:documentId/:token/verify-email', documentController.verifySignerEmail);
+router.get('/:documentId/:token', documentController.getPublicSigningData);
+router.post('/:documentId/:token', signingRateLimiter, documentController.processPublicSignature);
 
 module.exports = router;

@@ -3,7 +3,7 @@ const router = express.Router();
 const transactionWorkflowController = require('../controllers/transactionWorkflowController');
 const auditLogController = require('../controllers/auditLogController');
 const groupController = require('../controllers/groupController');
-const { protect } = require('../middleware/authMiddleware');
+const { protect, restrictTo } = require('../middleware/authMiddleware');
 
 router.use(protect);
 
@@ -15,7 +15,8 @@ router.get('/workflows/stats', transactionWorkflowController.getWorkflowStats);
 
 // Audit Logs
 router.get('/audit', auditLogController.getAuditLogs);
-router.post('/audit', auditLogController.createAuditLog);
+// QA hardening 2026-09-18: clients must not forge audit rows via POST.
+router.post('/audit', restrictTo('Super Admin', 'Admin'), auditLogController.createAuditLog);
 router.get('/audit/stats', auditLogController.getAuditStats);
 
 // Groups

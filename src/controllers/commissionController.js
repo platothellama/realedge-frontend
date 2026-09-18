@@ -3,9 +3,19 @@ const { Commission, Deal, Property, User } = require('../models/associations');
 exports.getCommissions = async (req, res) => {
   try {
     const { status, agentId } = req.query;
+    const { Op } = require('sequelize');
+
+    // QA hardening 2026-09-18: non-finance callers see only their own rows
+    // (previously anyone's pay enumerable via ?agentId=).
+    const role = req.user?.role;
+    const finance = role === 'Super Admin' || role === 'Admin' || role === 'Accountant';
     let where = {};
     if (status) where.status = status;
-    if (agentId) where.agentId = agentId;
+    if (finance) {
+      if (agentId) where.agentId = agentId;
+    } else {
+      where[Op.or] = [{ agentId: req.user.id }, { agent2Id: req.user.id }];
+    }
 
     const commissions = await Commission.findAll({
       where,
@@ -20,7 +30,7 @@ exports.getCommissions = async (req, res) => {
 
     res.status(200).json(commissions);
   } catch (error) {
-    res.status(500).json({ message: 'Error fetching commissions', error: error.message });
+    res.status(500).json({ message: 'Error fetching commissions', ...require('../utils/http').safeError(error) });
   }
 };
 
@@ -79,7 +89,7 @@ exports.calculateCommission = async (req, res) => {
       officeCommission
     });
   } catch (error) {
-    res.status(500).json({ message: 'Error calculating commission', error: error.message });
+    res.status(500).json({ message: 'Error calculating commission', ...require('../utils/http').safeError(error) });
   }
 };
 
@@ -133,7 +143,7 @@ exports.createCommission = async (req, res) => {
 
     res.status(201).json(commission);
   } catch (error) {
-    res.status(400).json({ message: 'Error creating commission', error: error.message });
+    res.status(400).json({ message: 'Error creating commission', ...require('../utils/http').safeError(error) });
   }
 };
 
@@ -143,11 +153,28 @@ exports.updateCommissionStatus = async (req, res) => {
     if (!commission) return res.status(404).json({ message: 'Commission not found' });
 
     const { status, paidAmount } = req.body;
+
+    // QA hardening 2026-09-18: reject unknown statuses (legacy ENUM:
+    // pending | approved | paid | disbursed) instead of persisting garbage.
+    const allowedStatuses = ['pending', 'approved', 'paid', 'disbursed'];
+    if (status !== undefined && !allowedStatuses.includes(status)) {
+      return res.status(400).json({ message: `Invalid status. Allowed: ${allowedStatuses.join(', ')}` });
+    }
+    if (paidAmount !== undefined && (typeof paidAmount !== 'number' || !(paidAmount > 0))) {
+      return res.status(400).json({ message: 'paidAmount must be a positive number' });
+    }
     
     if (status === 'paid' && paidAmount) {
+      // QA hardening 2026-09-18: cumulative partial pays cannot exceed the
+      // agent's share (previously unbounded accumulation).
+      const cap = Number(commission.agentCommission);
+      const running = Number(commission.paidAmount || 0) + paidAmount;
+      if (Number.isFinite(cap) && cap > 0 && running - cap > 0) {
+        return res.status(400).json({ message: `Overpayment rejected: cumulative ${running} exceeds share ${cap}` });
+      }
       await commission.update({
         status,
-        paidAmount: commission.paidAmount + paidAmount,
+        paidAmount: running,
         paidAt: new Date()
       });
     } else {
@@ -156,42 +183,50 @@ exports.updateCommissionStatus = async (req, res) => {
 
     res.status(200).json(commission);
   } catch (error) {
-    res.status(400).json({ message: 'Error updating commission', error: error.message });
+    res.status(400).json({ message: 'Error updating commission', ...require('../utils/http').safeError(error) });
   }
 };
 
 exports.getCommissionStats = async (req, res) => {
   try {
     const { Op } = require('sequelize');
-    
+
+    // QA hardening 2026-09-18: stats scoped like the list (own rows unless
+    // finance). The company-wide byAgent/byStatus breakdowns stay
+    // finance-only (they enumerate everyone's pay).
+    const role = req.user?.role;
+    const finance = role === 'Super Admin' || role === 'Admin' || role === 'Accountant';
+    const scope = finance ? {} : { [Op.or]: [{ agentId: req.user.id }, { agent2Id: req.user.id }] };
+
     const [totalPending, totalApproved, totalPaid, pendingCount, approvedCount, paidCount, officeTotal] = await Promise.all([
-      Commission.sum('agentCommission', { where: { status: 'pending' } }),
-      Commission.sum('agentCommission', { where: { status: 'approved' } }),
-      Commission.sum('agentCommission', { where: { status: { [Op.in]: ['paid', 'disbursed'] } } }),
-      Commission.count({ where: { status: 'pending' } }),
-      Commission.count({ where: { status: 'approved' } }),
-      Commission.count({ where: { status: { [Op.in]: ['paid', 'disbursed'] } } }),
-      Commission.sum('officeCommission', { where: { status: { [Op.in]: ['paid', 'disbursed'] } } })
+      Commission.sum('agentCommission', { where: { ...scope, status: 'pending' } }),
+      Commission.sum('agentCommission', { where: { ...scope, status: 'approved' } }),
+      Commission.sum('agentCommission', { where: { ...scope, status: { [Op.in]: ['paid', 'disbursed'] } } }),
+      Commission.count({ where: { ...scope, status: 'pending' } }),
+      Commission.count({ where: { ...scope, status: 'approved' } }),
+      Commission.count({ where: { ...scope, status: { [Op.in]: ['paid', 'disbursed'] } } }),
+      Commission.sum('officeCommission', { where: { ...scope, status: { [Op.in]: ['paid', 'disbursed'] } } })
     ]);
 
-    const byAgent = await Commission.findAll({
+    const byAgent = finance ? await Commission.findAll({
       where: { status: { [Op.in]: ['paid', 'disbursed'] } },
       include: [{ model: User, as: 'agent', attributes: ['id', 'name'] }],
       attributes: ['agentId', [require('sequelize').fn('SUM', require('sequelize').col('agentCommission')), 'total']],
       group: ['agentId', 'agent.id']
-    });
+    }) : [];
 
-    const byStatus = await Commission.findAll({
+    const byStatus = finance ? await Commission.findAll({
       attributes: ['status', [require('sequelize').fn('COUNT', require('sequelize').col('id')), 'count'], [require('sequelize').fn('SUM', require('sequelize').col('grossCommission')), 'total']],
       group: ['status']
-    });
+    }) : [];
 
     const thisMonth = new Date();
     thisMonth.setDate(1);
     thisMonth.setHours(0, 0, 0, 0);
-    
-    const thisMonthPaid = await Commission.sum('agentCommission', { 
-      where: { 
+
+    const thisMonthPaid = await Commission.sum('agentCommission', {
+      where: {
+        ...scope,
         status: { [Op.in]: ['paid', 'disbursed'] },
         paidAt: { [Op.gte]: thisMonth }
       }
@@ -210,6 +245,6 @@ exports.getCommissionStats = async (req, res) => {
       byStatus: byStatus.map(s => ({ status: s.status, count: Number(s.dataValues.count), total: Number(s.dataValues.total) }))
     });
   } catch (error) {
-    res.status(500).json({ message: 'Error fetching commission stats', error: error.message });
+    res.status(500).json({ message: 'Error fetching commission stats', ...require('../utils/http').safeError(error) });
   }
 };

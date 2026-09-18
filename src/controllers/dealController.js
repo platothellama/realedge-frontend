@@ -2,6 +2,53 @@ const { Deal, Property, User, Lead, Seller, Group, DealCommission } = require('.
 const { Op } = require('sequelize');
 const commissionService = require('../services/commissionService');
 
+// QA hardening 2026-09-18: only benign seller columns (mirrors sellerRoutes).
+const SELLER_FIELDS = ['name', 'email', 'phone', 'address', 'city', 'country', 'notes'];
+const pickSeller = (body) => {
+  const out = {};
+  for (const f of SELLER_FIELDS) {
+    if (body && body[f] !== undefined) out[f] = body[f];
+  }
+  // Empty-string email fails Sequelize isEmail (allowNull only skips null).
+  // Normalize "" / whitespace to null (= "no email").
+  if (typeof out.email === 'string') {
+    out.email = out.email.trim() || null;
+  }
+  return out;
+};
+
+const isDealPrivileged = (role) => role === 'Super Admin' || role === 'Admin';
+
+/**
+ * Constrain broker/group attribution for non-admins. Legit flows preserved:
+ * - self attribution
+ * - the deal property's assignee (team listings auto-populate this)
+ * - groups the user belongs to (or the property's group)
+ * Anything else falls back to self (brokerId) or is dropped (groupId).
+ */
+async function normalizeDealAttribution(dealData, user, property) {
+  if (isDealPrivileged(user?.role)) return;
+  if (dealData.brokerId && String(dealData.brokerId) !== String(user.id)) {
+    const assignee = property?.assignedToUserId;
+    if (!assignee || String(assignee) !== String(dealData.brokerId)) {
+      dealData.brokerId = user.id;
+    }
+  }
+  if (dealData.groupId) {
+    let ok = property?.assignedToGroupId && String(property.assignedToGroupId) === String(dealData.groupId);
+    if (!ok) {
+      try {
+        const { UserGroup } = require('../models/associations');
+        ok = !!(await UserGroup.findOne({ where: { userId: user.id, groupId: dealData.groupId } }));
+      } catch (_) { ok = false; }
+    }
+    if (!ok) delete dealData.groupId;
+  }
+  if (!dealData.brokerId && !dealData.groupId) {
+    dealData.brokerId = user.id;
+  }
+}
+
 exports.getAllDeals = async (req, res) => {
   try {
     const userRole = req.user.role;
@@ -22,7 +69,12 @@ exports.getAllDeals = async (req, res) => {
       whereClause = { [Op.or]: or };
     }
 
-    const deals = await Deal.findAll({
+    // QA 2026-09-18: bounded list (same contract as leads: explicit
+    // ?page/?limit returns {data, pagination}; legacy callers keep the raw
+    // array, capped).
+    const page = Math.min(Math.max(parseInt(req.query.page, 10) || 0, 0), 1000);
+    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 0, 0), 200);
+    const findOpts = {
       where: whereClause,
       include: [
         { model: Property, as: 'property', attributes: ['id', 'title', 'price', 'photos'] },
@@ -32,11 +84,24 @@ exports.getAllDeals = async (req, res) => {
         { model: Group, as: 'dealGroup', attributes: ['id', 'name'] }
       ],
       order: [['createdAt', 'DESC']]
-    });
+    };
+    if (page > 0 && limit > 0) {
+      findOpts.limit = limit;
+      findOpts.offset = (page - 1) * limit;
+      // distinct: includes multiply rows; count must count deals.
+      findOpts.distinct = true;
+      const { count, rows } = await Deal.findAndCountAll(findOpts);
+      return res.status(200).json({
+        data: rows,
+        pagination: { page, limit, total: count, totalPages: Math.ceil(count / limit) }
+      });
+    }
+    findOpts.limit = 2000;
+    const deals = await Deal.findAll(findOpts);
 
     res.status(200).json(deals);
   } catch (error) {
-    res.status(500).json({ message: 'Error fetching deals', error: error.message });
+    res.status(500).json({ message: 'Error fetching deals', ...require('../utils/http').safeError(error) });
   }
 };
 
@@ -70,13 +135,18 @@ exports.getDealById = async (req, res) => {
 
     res.status(200).json(deal);
   } catch (error) {
-    res.status(500).json({ message: 'Error fetching deal', error: error.message });
+    res.status(500).json({ message: 'Error fetching deal', ...require('../utils/http').safeError(error) });
   }
 };
 
 exports.createDeal = async (req, res) => {
   try {
     const { newSeller, sellerId, ...dealData } = req.body;
+    // QA 2026-09-18: PK, timestamps and the server-stamped close date are
+    // never client-settable.
+    for (const f of ['id', 'createdAt', 'updatedAt', 'closedAt']) {
+      delete dealData[f];
+    }
     
     // Check if property is already sold
     if (dealData.propertyId) {
@@ -90,19 +160,25 @@ exports.createDeal = async (req, res) => {
     let finalSellerId = sellerId;
     
     if (newSeller && newSeller.name) {
-      const existingSeller = await Seller.findOne({ where: { email: newSeller.email } });
+      const picked = pickSeller(newSeller);
+      // Only dedupe by email when one was actually provided; otherwise
+      // WHERE email IS NULL/"" would merge unrelated no-email sellers.
+      let existingSeller = null;
+      if (picked.email) {
+        existingSeller = await Seller.findOne({ where: { email: picked.email } });
+      }
       if (existingSeller) {
         finalSellerId = existingSeller.id;
       } else {
-        const seller = await Seller.create(newSeller);
+        const seller = await Seller.create(picked);
         finalSellerId = seller.id;
       }
     }
-    
+
     if (finalSellerId) {
       dealData.sellerId = finalSellerId;
     }
-    
+
     if (!dealData.sellerName && dealData.propertyId) {
       const propertyWithSeller = await Property.findByPk(dealData.propertyId, {
         include: [{ model: Seller, as: 'seller' }]
@@ -156,36 +232,65 @@ exports.createDeal = async (req, res) => {
       dealData.closedAt = new Date();
     }
 
-    const deal = await Deal.create(dealData);
+    // QA hardening 2026-09-18: constrain attribution (see helper).
+    if (!isDealPrivileged(req.user?.role) && dealData.propertyId) {
+      try {
+        const attrProp = await Property.findByPk(dealData.propertyId, {
+          attributes: ['assignedToUserId', 'assignedToGroupId']
+        });
+        await normalizeDealAttribution(dealData, req.user, attrProp);
+      } catch (_) {
+        if (!dealData.brokerId && !dealData.groupId) dealData.brokerId = req.user.id;
+      }
+    }
 
-    // Auto-generate commission and mark property as Sold when deal is created with Closed stage
+    // QA hardening 2026-09-18: deal row + property Sold flip commit together
+    // (commission calculation keeps its own transaction in the service and
+    // runs after commit — a calc failure is logged, never half-writes money).
+    const { sequelize } = require('../config/database');
+    const transaction = await sequelize.transaction();
+    let deal;
+    try {
+      deal = await Deal.create(dealData, { transaction });
+
+      // Auto-mark property as Sold when deal is created with Closed stage.
+      if (dealData.dealStage === 'Closed' && deal.propertyId) {
+        const property = await Property.findByPk(deal.propertyId, { transaction });
+        if (property && property.status !== 'Sold') {
+          const propertyUpdate = { status: 'Sold', soldAt: new Date() };
+
+          const soldPrice = dealData.finalPrice || deal.finalPrice || property.price;
+          propertyUpdate.soldPrice = soldPrice;
+
+          if (dealData.buyerName) {
+            propertyUpdate.soldTo = dealData.buyerName;
+          }
+
+          await property.update(propertyUpdate, { transaction });
+        }
+      }
+
+      await transaction.commit();
+    } catch (txError) {
+      try { await transaction.rollback(); } catch (_) {}
+      throw txError;
+    }
+
+    // Auto-generate commission when deal is created with Closed stage.
     if (dealData.dealStage === 'Closed' && deal.propertyId) {
-      const property = await Property.findByPk(deal.propertyId);
-      if (property && property.status !== 'Sold') {
-        const propertyUpdate = { status: 'Sold', soldAt: new Date() };
-        
-        const soldPrice = dealData.finalPrice || deal.finalPrice || property.price;
-        propertyUpdate.soldPrice = soldPrice;
-        
-        if (dealData.buyerName) {
-          propertyUpdate.soldTo = dealData.buyerName;
-        }
-        
-        try {
-          console.log('Calculating commission for new deal:', deal.id, 'finalPrice:', soldPrice);
-          const commissionResult = await commissionService.calculateDealCommission(deal.id);
-          console.log('Commission calculated successfully:', commissionResult);
-        } catch (commissionError) {
-          console.error('Failed to auto-generate commission:', commissionError);
-        }
-        
-        await property.update(propertyUpdate);
+      try {
+        const soldPrice = dealData.finalPrice || deal.finalPrice;
+        console.log('Calculating commission for new deal:', deal.id, 'finalPrice:', soldPrice);
+        const commissionResult = await commissionService.calculateDealCommission(deal.id);
+        console.log('Commission calculated successfully:', commissionResult);
+      } catch (commissionError) {
+        console.error('Failed to auto-generate commission:', commissionError);
       }
     }
 
     res.status(201).json(deal);
   } catch (error) {
-    res.status(400).json({ message: 'Error creating deal', error: error.message });
+    res.status(400).json({ message: 'Error creating deal', ...require('../utils/http').safeError(error) });
   }
 };
 
@@ -205,16 +310,27 @@ exports.updateDeal = async (req, res) => {
     }
 
     const { newSeller, sellerId, ...updateData } = req.body;
+    // QA 2026-09-18: PK/timestamps never client-settable; closedAt is
+    // stamped by the server on the transition to Closed (line ~311).
+    for (const f of ['id', 'createdAt', 'updatedAt', 'closedAt']) {
+      delete updateData[f];
+    }
 
     // Handle seller: either use existing sellerId or create new seller
     let finalSellerId = sellerId;
     
     if (newSeller && newSeller.name) {
-      const existingSeller = await Seller.findOne({ where: { email: newSeller.email } });
+      const picked = pickSeller(newSeller);
+      // Only dedupe by email when one was actually provided; otherwise
+      // WHERE email IS NULL/"" would merge unrelated no-email sellers.
+      let existingSeller = null;
+      if (picked.email) {
+        existingSeller = await Seller.findOne({ where: { email: picked.email } });
+      }
       if (existingSeller) {
         finalSellerId = existingSeller.id;
       } else {
-        const seller = await Seller.create(newSeller);
+        const seller = await Seller.create(picked);
         finalSellerId = seller.id;
       }
     }
@@ -239,44 +355,61 @@ exports.updateDeal = async (req, res) => {
       updateData.closedAt = new Date();
     }
 
-    await deal.update(updateData);
-
-    // Property locking: when deal reaches Reserved stage
-    if (updateData.dealStage === 'Reserved' && deal.property) {
-      await deal.property.update({ status: 'Reserved' });
+    // QA hardening 2026-09-18: constrain attribution on update as well
+    // (an owner could otherwise silently transfer deals to anyone).
+    if (!isDealPrivileged(userRole) && (updateData.brokerId !== undefined || updateData.groupId !== undefined)) {
+      await normalizeDealAttribution(updateData, req.user, deal.property);
     }
 
-    // Auto-generate commission when deal is Closed
-    if (updateData.dealStage === 'Closed') {
-      if (deal.property && deal.property.status === 'Sold') {
-        return res.status(400).json({ message: 'Property is already sold' });
+    const closingWithProperty =
+      updateData.dealStage === 'Closed' && deal.property && deal.property.status !== 'Sold';
+
+    // QA hardening 2026-09-18: on close, the deal row + property Sold flip
+    // commit in ONE transaction (previously deal.update committed first, so a
+    // later failure left Closed-without-Sold). Commission calculation keeps
+    // its own transaction in the service and runs after commit.
+    const { sequelize } = require('../config/database');
+    if (closingWithProperty) {
+      const soldPrice = updateData.finalPrice || deal.finalPrice || deal.property.price;
+      const propertyUpdate = { status: 'Sold', soldAt: new Date(), soldPrice };
+      if (deal.buyerName) {
+        propertyUpdate.soldTo = deal.buyerName;
       }
 
-      if (deal.property) {
-        const propertyUpdate = { status: 'Sold', soldAt: new Date() };
-        
-        const soldPrice = updateData.finalPrice || deal.finalPrice || deal.property.price;
-        propertyUpdate.soldPrice = soldPrice;
-        
-        if (deal.buyerName) {
-          propertyUpdate.soldTo = deal.buyerName;
-        }
-        
-        try {
-          console.log('Calculating commission for deal:', deal.id, 'finalPrice:', soldPrice);
-          const commissionResult = await commissionService.calculateDealCommission(deal.id);
-          console.log('Commission calculated successfully:', commissionResult);
-        } catch (commissionError) {
-          console.error('Failed to auto-generate commission:', commissionError);
-        }
-        
-        await deal.property.update(propertyUpdate);
+      const transaction = await sequelize.transaction();
+      try {
+        await deal.update(updateData, { transaction });
+        await deal.property.update(propertyUpdate, { transaction });
+        await transaction.commit();
+      } catch (txError) {
+        try { await transaction.rollback(); } catch (_) {}
+        throw txError;
+      }
+
+      try {
+        console.log('Calculating commission for deal:', deal.id, 'finalPrice:', soldPrice);
+        const commissionResult = await commissionService.calculateDealCommission(deal.id);
+        console.log('Commission calculated successfully:', commissionResult);
+      } catch (commissionError) {
+        console.error('Failed to auto-generate commission:', commissionError);
+      }
+    } else {
+      await deal.update(updateData);
+
+      // Property locking: when deal reaches Reserved stage
+      if (updateData.dealStage === 'Reserved' && deal.property) {
+        await deal.property.update({ status: 'Reserved' });
+      }
+
+      // Closing against an already-Sold property is rejected (no double-sell).
+      if (updateData.dealStage === 'Closed' && deal.property && deal.property.status === 'Sold') {
+        return res.status(400).json({ message: 'Property is already sold' });
       }
     }
 
     res.status(200).json(deal);
   } catch (error) {
-    res.status(400).json({ message: 'Error updating deal', error: error.message });
+    res.status(400).json({ message: 'Error updating deal', ...require('../utils/http').safeError(error) });
   }
 };
 
@@ -322,6 +455,28 @@ exports.deleteDeal = async (req, res) => {
   }
 };
 
+/**
+ * QA hardening 2026-09-18: commission endpoints expose/mutate deal money.
+ * Allowed: deal broker, member of the deal's group, or finance roles.
+ */
+async function checkDealCommissionAccess(deal, user) {
+  const role = user?.role;
+  if (role === 'Super Admin' || role === 'Admin' || role === 'Accountant') {
+    return { ok: true, finance: true };
+  }
+  if (deal.brokerId && String(deal.brokerId) === String(user.id)) {
+    return { ok: true, finance: false };
+  }
+  if (deal.groupId) {
+    try {
+      const { UserGroup } = require('../models/associations');
+      const m = await UserGroup.findOne({ where: { userId: user.id, groupId: deal.groupId } });
+      if (m) return { ok: true, finance: false };
+    } catch (_) {}
+  }
+  return { ok: false, finance: false };
+}
+
 exports.calculateDealCommission = async (req, res) => {
   try {
     const { id: dealId } = req.params;
@@ -329,6 +484,20 @@ exports.calculateDealCommission = async (req, res) => {
     const deal = await Deal.findByPk(dealId);
     if (!deal) {
       return res.status(404).json({ status: 'fail', message: 'Deal not found' });
+    }
+
+    const access = await checkDealCommissionAccess(deal, req.user);
+    if (!access.ok) {
+      return res.status(403).json({ status: 'fail', message: 'Access denied' });
+    }
+
+    // QA 2026-09-18: recalculation wipes + recreates commission rows.
+    // Refuse for non-finance callers when approved/paid rows exist.
+    if (!access.finance) {
+      const existing = await DealCommission.findAll({ where: { dealId }, attributes: ['status'] });
+      if (existing.some((c) => c.status && c.status !== 'pending')) {
+        return res.status(400).json({ status: 'fail', message: 'Commissions already approved/paid — ask Finance to re-run.' });
+      }
     }
 
     const result = await commissionService.calculateDealCommission(dealId);
@@ -341,7 +510,7 @@ exports.calculateDealCommission = async (req, res) => {
     res.status(400).json({ 
       status: 'error', 
       message: 'Error calculating commission', 
-      error: error.message 
+      ...require('../utils/http').safeError(error) 
     });
   }
 };
@@ -355,6 +524,11 @@ exports.getDealCommissions = async (req, res) => {
       return res.status(404).json({ status: 'fail', message: 'Deal not found' });
     }
 
+    const access = await checkDealCommissionAccess(deal, req.user);
+    if (!access.ok) {
+      return res.status(403).json({ status: 'fail', message: 'Access denied' });
+    }
+
     const commissions = await commissionService.getDealCommissions(dealId);
 
     res.status(200).json({
@@ -365,7 +539,7 @@ exports.getDealCommissions = async (req, res) => {
     res.status(500).json({ 
       status: 'error', 
       message: 'Error fetching commissions', 
-      error: error.message 
+      ...require('../utils/http').safeError(error) 
     });
   }
 };
@@ -385,11 +559,24 @@ exports.autoGenerateCommission = async (req, res) => {
       return res.status(404).json({ status: 'fail', message: 'Deal not found' });
     }
 
+    const access = await checkDealCommissionAccess(deal, req.user);
+    if (!access.ok) {
+      return res.status(403).json({ status: 'fail', message: 'Access denied' });
+    }
+
     if (deal.dealStage !== 'Closed') {
       return res.status(400).json({
         status: 'fail',
         message: 'Commission can only be generated for closed deals'
       });
+    }
+
+    // QA 2026-09-18: unchecked finalPrice was written straight into the deal.
+    if (finalPrice !== undefined && finalPrice !== null && finalPrice !== '') {
+      const fp = Number(finalPrice);
+      if (!Number.isFinite(fp) || fp <= 0) {
+        return res.status(400).json({ status: 'fail', message: 'finalPrice must be a positive number' });
+      }
     }
 
     const transaction = await require('../config/database').sequelize.transaction();
@@ -414,7 +601,7 @@ exports.autoGenerateCommission = async (req, res) => {
     res.status(400).json({
       status: 'error',
       message: 'Error generating commission',
-      error: error.message
+      ...require('../utils/http').safeError(error)
     });
   }
 };

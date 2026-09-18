@@ -3,6 +3,7 @@ const LoginLog = require('../models/loginLog');
 const notificationController = require('./notificationController');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
+const { safeError } = require('../utils/http');
 
 const signToken = (id) => {
   // PHASE 2 (D24): approved 7-day lifetime; no refresh table yet.
@@ -54,9 +55,12 @@ exports.register = async (req, res) => {
   try {
     const { name, email, password, role } = req.body;
     
-    // Prevent self-registration as Super Admin or Admin for security
-    const restrictedRoles = ['Super Admin', 'Admin', 'Office Manager'];
-    const assignedRole = restrictedRoles.includes(role) ? 'Agent' : role;
+    // Prevent self-registration as any privileged role for security.
+    // Only plain Agent self-registration is allowed; every other role
+    // (Admin family, Office Manager, Broker, Accountant, Marketing, Client)
+    // must be created by an authorized user via user management.
+    const restrictedRoles = ['Super Admin', 'Admin', 'Office Manager', 'Broker', 'Accountant', 'Marketing', 'Client'];
+    const assignedRole = restrictedRoles.includes(role) ? 'Agent' : (role || 'Agent');
 
     const newUser = await User.create({
       name,
@@ -65,9 +69,9 @@ exports.register = async (req, res) => {
       role: assignedRole
     });
 
-    createSendToken(newUser, 201, req, res);
+    return createSendToken(newUser, 201, req, res);
   } catch (error) {
-    res.status(400).json({ status: 'fail', message: error.message });
+    res.status(400).json({ status: 'fail', message: 'Error registering user', ...safeError(error) });
   }
 };
 
@@ -95,9 +99,9 @@ exports.login = async (req, res) => {
       return res.status(401).json({ status: 'fail', message: 'Incorrect email or password' });
     }
 
-    createSendToken(user, 200, req, res);
+    return createSendToken(user, 200, req, res);
   } catch (error) {
-    res.status(500).json({ status: 'error', message: error.message });
+    res.status(500).json({ status: 'error', message: 'Login failed. Please try again.', ...safeError(error) });
   }
 };
 
@@ -128,17 +132,22 @@ exports.googleLogin = async (req, res) => {
       }
     }
 
-    createSendToken(user, 200, req, res);
+    return createSendToken(user, 200, req, res);
   } catch (error) {
-    res.status(400).json({ status: 'fail', message: error.message });
+    res.status(400).json({ status: 'fail', message: 'Google sign-in failed', ...safeError(error) });
   }
 };
 
 exports.forgotPassword = async (req, res) => {
   try {
     const user = await User.findOne({ where: { email: req.body.email } });
+    // QA hardening 2026-09-18: always return the generic message so the
+    // endpoint cannot be used to enumerate registered emails.
     if (!user) {
-      return res.status(404).json({ status: 'fail', message: 'There is no user with that email address.' });
+      return res.status(200).json({
+        status: 'success',
+        message: 'If an account exists for this email, a reset link has been sent.'
+      });
     }
 
     const resetToken = crypto.randomBytes(32).toString('hex');
@@ -163,7 +172,7 @@ exports.forgotPassword = async (req, res) => {
       token: resetToken
     });
   } catch (error) {
-    res.status(500).json({ status: 'error', message: error.message });
+    res.status(500).json({ status: 'error', message: 'Could not process password-reset request.', ...safeError(error) });
   }
 };
 
@@ -176,7 +185,7 @@ exports.getLoginLogs = async (req, res) => {
     });
     res.status(200).json({ status: 'success', data: logs });
   } catch (error) {
-    res.status(500).json({ status: 'error', message: error.message });
+    res.status(500).json({ status: 'error', message: 'Error fetching login logs', ...safeError(error) });
   }
 };
 
@@ -188,8 +197,9 @@ exports.getMe = async (req, res) => {
       // the client has no legitimate use for these values).
       attributes: { exclude: ['password', 'twoFactorSecret', 'passwordResetToken', 'passwordResetExpires'] }
     });
+    if (!user) return res.status(404).json({ status: 'fail', message: 'User not found' });
     res.status(200).json({ status: 'success', data: { user } });
   } catch (error) {
-    res.status(500).json({ status: 'error', message: error.message });
+    res.status(500).json({ status: 'error', message: 'Error fetching profile', ...safeError(error) });
   }
 };

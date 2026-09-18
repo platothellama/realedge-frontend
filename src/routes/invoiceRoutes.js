@@ -4,6 +4,9 @@ const invoiceController = require('../controllers/invoiceController');
 const { protect, restrictTo } = require('../middleware/authMiddleware');
 
 router.use(protect);
+// QA 2026-09-18: finance-only surface (mirrors the frontend route gate).
+// Previously any authenticated role could read/mutate anyone's invoices.
+router.use(restrictTo('Super Admin', 'Admin', 'Accountant'));
 
 router.get('/', invoiceController.getInvoices);
 // PHASE 1: static paths before parametric ones so a future GET /:id can

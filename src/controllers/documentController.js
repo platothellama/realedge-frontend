@@ -55,6 +55,18 @@ function getClientIp(req) {
          'unknown';
 }
 
+// QA hardening 2026-09-18: document access = uploader, connected user, or
+// admin. Mirrors the downloadDocument gate; use on every mutating/private
+// document path (sign, version, link, delete, audit trail).
+function canAccessDocument(document, user) {
+  if (!document || !user) return false;
+  const role = user.role;
+  if (role === 'Super Admin' || role === 'Admin') return true;
+  const uid = String(user.id);
+  return (document.uploadedByUserId && String(document.uploadedByUserId) === uid) ||
+    (document.userId && String(document.userId) === uid);
+}
+
 exports.uploadDocument = async (req, res) => {
   try {
     if (!req.file) {
@@ -70,10 +82,11 @@ exports.uploadDocument = async (req, res) => {
       return res.status(400).json({ status: 'fail', message: magicErr.message });
     }
     const safeFileName = uploadMw.sanitizeDisplayName(req.file.originalname);
-    const { title, type, propertyId, dealId, isDigitalSignatureEnabled, visibility, signerClient, signerAgent, signerOwner, signatureStatus, userId: connectedUserId } = req.body;
+    const { title, type, propertyId, dealId, isDigitalSignatureEnabled, visibility, signerClient, signerAgent, signerOwner, userId: connectedUserId } = req.body;
     const userId = req.user.id;
 
-    // Create the Document record
+    // Create the Document record (QA 2026-09-18: signatureStatus is always
+    // born pending — a client-born `signed` skipped signing entirely).
     const document = await Document.create({
       title,
       type,
@@ -85,7 +98,7 @@ exports.uploadDocument = async (req, res) => {
       signerClient: signerClient === 'true' || signerClient === true,
       signerAgent: signerAgent === 'true' || signerAgent === true,
       signerOwner: signerOwner === 'true' || signerOwner === true,
-      signatureStatus: signatureStatus || 'pending',
+      signatureStatus: 'pending',
       userId: connectedUserId || null
     });
 
@@ -113,8 +126,13 @@ exports.uploadDocument = async (req, res) => {
     
     // Calculate retention period
     // PHASE 2 (D21): 10-year default retention.
+    // QA 2026-09-18: clamp client input (negative/string/huge values
+    // previously persisted and produced Invalid-Date expiries).
+    const rawRetention = Number(req.body.retentionPeriodDays);
     const retentionPeriodDays =
-req.body.retentionPeriodDays || 3650;
+      Number.isFinite(rawRetention) && rawRetention > 0
+        ? Math.min(Math.floor(rawRetention), 36500)
+        : 3650;
     const retentionExpiresAt = new Date();
     retentionExpiresAt.setDate(retentionExpiresAt.getDate() + retentionPeriodDays);
 
@@ -155,7 +173,7 @@ req.body.retentionPeriodDays || 3650;
 
     res.status(201).json(result);
   } catch (error) {
-    res.status(500).json({ message: 'Error uploading document', error: error.message });
+    res.status(500).json({ message: 'Error uploading document', ...require('../utils/http').safeError(error) });
   }
 };
 
@@ -167,6 +185,10 @@ exports.addVersion = async (req, res) => {
 
     const document = await Document.findByPk(req.params.id);
     if (!document) return res.status(404).json({ message: 'Document not found' });
+
+    if (!canAccessDocument(document, req.user)) {
+      return res.status(403).json({ message: 'Access denied' });
+    }
 
     // PHASE 1: same content + filename guarantees as the initial upload.
     const uploadMw = require('../middleware/uploadMiddleware');
@@ -214,7 +236,7 @@ exports.addVersion = async (req, res) => {
 
     res.status(200).json(result);
   } catch (error) {
-    res.status(500).json({ message: 'Error adding version', error: error.message });
+    res.status(500).json({ message: 'Error adding version', ...require('../utils/http').safeError(error) });
   }
 };
 
@@ -249,7 +271,7 @@ exports.getDocuments = async (req, res) => {
 
     res.status(200).json(documents);
   } catch (error) {
-    res.status(500).json({ message: 'Error fetching documents', error: error.message });
+    res.status(500).json({ message: 'Error fetching documents', ...require('../utils/http').safeError(error) });
   }
 };
 
@@ -257,6 +279,10 @@ exports.signDocument = async (req, res) => {
   try {
     const document = await Document.findByPk(req.params.id);
     if (!document) return res.status(404).json({ message: 'Document not found' });
+
+    if (!canAccessDocument(document, req.user)) {
+      return res.status(403).json({ message: 'Access denied' });
+    }
 
     if (document.signatureStatus === 'signed') {
       return res.status(400).json({ message: 'Document has already been signed' });
@@ -273,6 +299,19 @@ exports.signDocument = async (req, res) => {
       signedByUserId: req.user.id
     });
 
+    // QA 2026-09-18: signing must leave an audit trail like every other
+    // signing path.
+    await logAuditEvent(
+      'DOCUMENT_SIGNED',
+      'Document',
+      document.id,
+      req.user.id,
+      getClientIp(req),
+      req.headers['user-agent'],
+      `Document signed: ${document.title}`,
+      null
+    );
+
     // Create notification for document signing
     await notificationController.createNotification(
       req.user.id,
@@ -284,7 +323,7 @@ exports.signDocument = async (req, res) => {
 
     res.status(200).json(document);
   } catch (error) {
-    res.status(500).json({ message: 'Error signing document', error: error.message });
+    res.status(500).json({ message: 'Error signing document', ...require('../utils/http').safeError(error) });
   }
 };
 
@@ -295,6 +334,12 @@ exports.generateSigningLink = async (req, res) => {
     
     const document = await Document.findByPk(id);
     if (!document) return res.status(404).json({ message: 'Document not found' });
+
+    // QA 2026-09-18: signing links for someone else's document are a
+    // phishing vector.
+    if (!canAccessDocument(document, req.user)) {
+      return res.status(403).json({ message: 'Access denied' });
+    }
 
     if (!document.isDigitalSignatureEnabled) {
       return res.status(400).json({ message: 'Digital signature not enabled for this document' });
@@ -367,7 +412,7 @@ exports.generateSigningLink = async (req, res) => {
       emailVerificationToken
     });
   } catch (error) {
-    res.status(500).json({ message: 'Error generating signing link', error: error.message });
+    res.status(500).json({ message: 'Error generating signing link', ...require('../utils/http').safeError(error) });
   }
 };
 
@@ -412,7 +457,7 @@ exports.verifySignerEmail = async (req, res) => {
       verified: true
     });
   } catch (error) {
-    res.status(500).json({ message: 'Error verifying email', error: error.message });
+    res.status(500).json({ message: 'Error verifying email', ...require('../utils/http').safeError(error) });
   }
 };
 
@@ -526,7 +571,7 @@ exports.signDocumentByToken = async (req, res) => {
       tamperCheckPassed
     });
   } catch (error) {
-    res.status(500).json({ message: 'Error signing document', error: error.message });
+    res.status(500).json({ message: 'Error signing document', ...require('../utils/http').safeError(error) });
   }
 };
 
@@ -555,7 +600,7 @@ exports.downloadDocument = async (req, res) => {
     const signedUrl = await createSignedUrl(key, 86400);
     res.status(200).json({ url: signedUrl, expiresInSeconds: 86400 });
   } catch (error) {
-    res.status(500).json({ message: 'Error generating download URL', error: error.message });
+    res.status(500).json({ message: 'Error generating download URL', ...require('../utils/http').safeError(error) });
   }
 };
 
@@ -563,6 +608,11 @@ exports.deleteDocument = async (req, res) => {
   try {
     const document = await Document.findByPk(req.params.id);
     if (!document) return res.status(404).json({ message: 'Document not found' });
+
+    // QA 2026-09-18: anyone could delete anyone's unsigned draft.
+    if (!canAccessDocument(document, req.user)) {
+      return res.status(403).json({ message: 'Access denied' });
+    }
 
     // PHASE 2 (D21): signed documents are immutable — never hard-delete
     // (10y retention). Unsigned drafts may be deleted.
@@ -597,7 +647,7 @@ exports.deleteDocument = async (req, res) => {
 
     res.status(200).json({ message: 'Document deleted successfully' });
   } catch (error) {
-    res.status(500).json({ message: 'Error deleting document', error: error.message });
+    res.status(500).json({ message: 'Error deleting document', ...require('../utils/http').safeError(error) });
   }
 };
 
@@ -637,7 +687,7 @@ exports.getPublicSigningData = async (req, res) => {
       canSign: document.signatureStatus !== 'signed'
     });
   } catch (error) {
-    res.status(500).json({ message: 'Error loading signing data', error: error.message });
+    res.status(500).json({ message: 'Error loading signing data', ...require('../utils/http').safeError(error) });
   }
 };
 
@@ -680,13 +730,12 @@ exports.processPublicSignature = async (req, res) => {
     }
 
     const document = await Document.findByPk(documentId);
+    if (!document) return res.status(404).json({ message: 'Document not found' });
 
     // Check GDPR consent for EU jurisdiction
     if (document.legalJurisdiction === 'EU' && !gdprConsent) {
       return res.status(400).json({ message: 'GDPR consent is required for documents in EU jurisdiction' });
     }
-    if (!document) return res.status(404).json({ message: 'Document not found' });
-
     if (document.signatureStatus === 'signed') {
       return res.status(400).json({ message: 'Document has already been signed' });
     }
@@ -851,7 +900,7 @@ exports.processPublicSignature = async (req, res) => {
         : 'This electronic signature complies with the ESIGN Act and UETA'
     });
   } catch (error) {
-    res.status(500).json({ message: 'Error processing signature', error: error.message });
+    res.status(500).json({ message: 'Error processing signature', ...require('../utils/http').safeError(error) });
   }
 };
 
@@ -911,14 +960,21 @@ exports.getComplianceDisclosures = async (req, res) => {
       timestamp: new Date().toISOString()
     });
   } catch (error) {
-    res.status(500).json({ message: 'Error fetching disclosures', error: error.message });
+    res.status(500).json({ message: 'Error fetching disclosures', ...require('../utils/http').safeError(error) });
   }
 };
 
 exports.getSignatureAuditTrail = async (req, res) => {
   try {
     const { documentId } = req.params;
-    
+
+    // QA 2026-09-18: the trail carries signer PII (emails, IPs).
+    const document = await Document.findByPk(documentId);
+    if (!document) return res.status(404).json({ message: 'Document not found' });
+    if (!canAccessDocument(document, req.user)) {
+      return res.status(403).json({ message: 'Access denied' });
+    }
+
     const auditLogs = await AuditLog.findAll({
       where: {
         entityType: 'Document',
@@ -949,6 +1005,6 @@ exports.getSignatureAuditTrail = async (req, res) => {
       }
     });
   } catch (error) {
-    res.status(500).json({ message: 'Error fetching audit trail', error: error.message });
+    res.status(500).json({ message: 'Error fetching audit trail', ...require('../utils/http').safeError(error) });
   }
 };

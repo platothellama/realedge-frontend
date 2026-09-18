@@ -21,19 +21,20 @@ exports.getCallLogs = async (req, res) => {
 
     res.status(200).json(callLogs);
   } catch (error) {
-    res.status(500).json({ message: 'Error fetching call logs', error: error.message });
+    res.status(500).json({ message: 'Error fetching call logs', ...require('../utils/http').safeError(error) });
   }
 };
 
 exports.createCallLog = async (req, res) => {
   try {
+    const { id, createdAt, updatedAt, agentId, ...body } = req.body || {};
     const callLog = await CallLog.create({
-      ...req.body,
+      ...body,
       agentId: req.user.id
     });
     res.status(201).json(callLog);
   } catch (error) {
-    res.status(400).json({ message: 'Error creating call log', error: error.message });
+    res.status(400).json({ message: 'Error creating call log', ...require('../utils/http').safeError(error) });
   }
 };
 
@@ -42,10 +43,11 @@ exports.updateCallLog = async (req, res) => {
     const callLog = await CallLog.findByPk(req.params.id);
     if (!callLog) return res.status(404).json({ message: 'Call log not found' });
 
-    await callLog.update(req.body);
+    const { id, createdAt, updatedAt, agentId, ...updates } = req.body || {};
+    await callLog.update(updates);
     res.status(200).json(callLog);
   } catch (error) {
-    res.status(400).json({ message: 'Error updating call log', error: error.message });
+    res.status(400).json({ message: 'Error updating call log', ...require('../utils/http').safeError(error) });
   }
 };
 
@@ -57,7 +59,7 @@ exports.deleteCallLog = async (req, res) => {
     await callLog.destroy();
     res.status(200).json({ message: 'Call log deleted' });
   } catch (error) {
-    res.status(400).json({ message: 'Error deleting call log', error: error.message });
+    res.status(400).json({ message: 'Error deleting call log', ...require('../utils/http').safeError(error) });
   }
 };
 
@@ -92,6 +94,6 @@ exports.getCallStats = async (req, res) => {
       byOutcome: byOutcome.map(o => ({ outcome: o.outcome, count: Number(o.dataValues.count) }))
     });
   } catch (error) {
-    res.status(500).json({ message: 'Error fetching call stats', error: error.message });
+    res.status(500).json({ message: 'Error fetching call stats', ...require('../utils/http').safeError(error) });
   }
 };

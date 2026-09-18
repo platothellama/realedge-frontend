@@ -13,19 +13,22 @@ exports.getCommissionSettings = async (req, res) => {
     res.status(500).json({
       status: 'error',
       message: 'Error fetching commission settings',
-      error: error.message
+      ...require('../utils/http').safeError(error)
     });
   }
 };
 
 exports.updateCommissionSettings = async (req, res) => {
   try {
-    const { company, team } = req.body;
+    const { company: rawCompany, team: rawTeam } = req.body;
+    // QA hardening 2026-09-18: coerce before comparing (string concat bug).
+    const company = Number(rawCompany);
+    const team = Number(rawTeam);
 
-    if (company === undefined || team === undefined) {
+    if (!Number.isFinite(company) || !Number.isFinite(team)) {
       return res.status(400).json({
         status: 'fail',
-        message: 'company and team percentages are required'
+        message: 'company and team percentages must be numbers'
       });
     }
 
@@ -47,7 +50,7 @@ exports.updateCommissionSettings = async (req, res) => {
     res.status(400).json({
       status: 'error',
       message: 'Error updating commission settings',
-      error: error.message
+      ...require('../utils/http').safeError(error)
     });
   }
 };
@@ -66,7 +69,7 @@ exports.getAllSettings = async (req, res) => {
     res.status(500).json({
       status: 'error',
       message: 'Error fetching settings',
-      error: error.message
+      ...require('../utils/http').safeError(error)
     });
   }
 };
@@ -103,7 +106,7 @@ exports.updateSetting = async (req, res) => {
     res.status(400).json({
       status: 'error',
       message: 'Error updating setting',
-      error: error.message
+      ...require('../utils/http').safeError(error)
     });
   }
 };
@@ -111,15 +114,23 @@ exports.updateSetting = async (req, res) => {
 exports.getCommissionsSummary = async (req, res) => {
   try {
     const { status, startDate, endDate } = req.query;
-    
+
     const where = {};
+    // QA hardening 2026-09-18: non-finance callers see only their own shares
+    // (sums below derive from these rows, so they scope automatically).
+    const role = req.user?.role;
+    if (role !== 'Super Admin' && role !== 'Admin' && role !== 'Accountant') {
+      where.userId = req.user.id;
+    }
     if (status) {
       where.status = status;
     }
     if (startDate || endDate) {
+      // QA fix 2026-09-18: Sequelize operators, not Mongo '$gte' (which was silently ignored).
+      const { Op } = require('sequelize');
       where.createdAt = {};
-      if (startDate) where.createdAt.$gte = new Date(startDate);
-      if (endDate) where.createdAt.$lte = new Date(endDate);
+      if (startDate) where.createdAt[Op.gte] = new Date(startDate);
+      if (endDate) where.createdAt[Op.lte] = new Date(endDate);
     }
 
     const commissions = await DealCommission.findAll({
@@ -167,7 +178,7 @@ exports.getCommissionsSummary = async (req, res) => {
     res.status(500).json({
       status: 'error',
       message: 'Error fetching commissions summary',
-      error: error.message
+      ...require('../utils/http').safeError(error)
     });
   }
 };
@@ -187,7 +198,7 @@ exports.approveCommission = async (req, res) => {
     res.status(400).json({
       status: 'error',
       message: 'Error approving commission',
-      error: error.message
+      ...require('../utils/http').safeError(error)
     });
   }
 };
@@ -207,7 +218,7 @@ exports.markCommissionPaid = async (req, res) => {
     res.status(400).json({
       status: 'error',
       message: 'Error marking commission as paid',
-      error: error.message
+      ...require('../utils/http').safeError(error)
     });
   }
 };

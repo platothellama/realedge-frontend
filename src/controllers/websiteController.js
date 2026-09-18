@@ -93,7 +93,7 @@ exports.getWebsites = async (req, res) => {
     });
     res.status(200).json(websites);
   } catch (error) {
-    res.status(500).json({ message: 'Error fetching websites', error: error.message });
+    res.status(500).json({ message: 'Error fetching websites', ...require('../utils/http').safeError(error) });
   }
 };
 
@@ -108,14 +108,21 @@ exports.getWebsite = async (req, res) => {
     if (!website) return res.status(404).json({ message: 'Website not found' });
     res.status(200).json(website);
   } catch (error) {
-    res.status(500).json({ message: 'Error fetching website', error: error.message });
+    res.status(500).json({ message: 'Error fetching website', ...require('../utils/http').safeError(error) });
   }
 };
+
+// QA hardening 2026-09-18: slugs are used in URLs, public routes, and the
+// export Content-Disposition — allowlist at creation.
+const SLUG_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 exports.createWebsite = async (req, res) => {
   try {
     const { name, slug, description, template } = req.body;
-    
+
+    if (!slug || typeof slug !== 'string' || !SLUG_RE.test(slug) || slug.length > 80) {
+      return res.status(400).json({ message: 'Slug must match [a-z0-9-] (max 80 chars)' });
+    }
     const existingSlug = await Website.findOne({ where: { slug } });
     if (existingSlug) {
       return res.status(400).json({ message: 'Slug already exists' });
@@ -124,7 +131,7 @@ exports.createWebsite = async (req, res) => {
     // PHASE 2 (D23): headerCode/footerCode removed from the API surface
     // (stored-JS reservoir). Never accept them on write; columns dropped in
     // a later migration. Existing values are archived, never served.
-    const { headerCode: _hc, footerCode: _fc, ...restBody } = req.body;
+    const { headerCode: _hc, footerCode: _fc, id: _id, createdAt: _ca, updatedAt: _ua, ...restBody } = req.body;
     const website = await Website.create({
       name,
       slug,
@@ -144,7 +151,7 @@ exports.createWebsite = async (req, res) => {
 
     res.status(201).json(website);
   } catch (error) {
-    res.status(500).json({ message: 'Error creating website', error: error.message });
+    res.status(500).json({ message: 'Error creating website', ...require('../utils/http').safeError(error) });
   }
 };
 
@@ -154,14 +161,14 @@ exports.updateWebsite = async (req, res) => {
     if (!website) return res.status(404).json({ message: 'Website not found' });
     
     // PHASE 2 (D23): strip custom code on update as well.
-    const { headerCode: _hc2, footerCode: _fc2, ...updateBody } = req.body;
+    const { headerCode: _hc2, footerCode: _fc2, id: _id2, createdAt: _ca2, updatedAt: _ua2, ...updateBody } = req.body;
     await website.update({ ...updateBody, headerCode: null, footerCode: null });
     const plain = website.toJSON();
     delete plain.headerCode;
     delete plain.footerCode;
     res.status(200).json(plain);
   } catch (error) {
-    res.status(500).json({ message: 'Error updating website', error: error.message });
+    res.status(500).json({ message: 'Error updating website', ...require('../utils/http').safeError(error) });
   }
 };
 
@@ -173,7 +180,7 @@ exports.deleteWebsite = async (req, res) => {
     await website.destroy();
     res.status(200).json({ message: 'Website deleted' });
   } catch (error) {
-    res.status(500).json({ message: 'Error deleting website', error: error.message });
+    res.status(500).json({ message: 'Error deleting website', ...require('../utils/http').safeError(error) });
   }
 };
 
@@ -210,7 +217,7 @@ exports.getWebsiteBySlug = async (req, res) => {
 
     res.status(200).json(plain);
   } catch (error) {
-    res.status(500).json({ message: 'Error fetching website', error: error.message });
+    res.status(500).json({ message: 'Error fetching website', ...require('../utils/http').safeError(error) });
   }
 };
 
@@ -223,7 +230,7 @@ exports.getPages = async (req, res) => {
     });
     res.status(200).json(pages);
   } catch (error) {
-    res.status(500).json({ message: 'Error fetching pages', error: error.message });
+    res.status(500).json({ message: 'Error fetching pages', ...require('../utils/http').safeError(error) });
   }
 };
 
@@ -235,19 +242,20 @@ exports.getPage = async (req, res) => {
     if (!page) return res.status(404).json({ message: 'Page not found' });
     res.status(200).json(page);
   } catch (error) {
-    res.status(500).json({ message: 'Error fetching page', error: error.message });
+    res.status(500).json({ message: 'Error fetching page', ...require('../utils/http').safeError(error) });
   }
 };
 
 exports.createPage = async (req, res) => {
   try {
+    const { id, createdAt, updatedAt, websiteId, ...pageBody } = req.body || {};
     const page = await WebsitePage.create({
-      ...req.body,
+      ...pageBody,
       websiteId: req.params.websiteId
     });
     res.status(201).json(page);
   } catch (error) {
-    res.status(500).json({ message: 'Error creating page', error: error.message });
+    res.status(500).json({ message: 'Error creating page', ...require('../utils/http').safeError(error) });
   }
 };
 
@@ -256,10 +264,11 @@ exports.updatePage = async (req, res) => {
     const page = await WebsitePage.findByPk(req.params.pageId);
     if (!page) return res.status(404).json({ message: 'Page not found' });
     
-    await page.update(req.body);
+    const { id, createdAt, updatedAt, websiteId, ...pageUpdates } = req.body || {};
+    await page.update(pageUpdates);
     res.status(200).json(page);
   } catch (error) {
-    res.status(500).json({ message: 'Error updating page', error: error.message });
+    res.status(500).json({ message: 'Error updating page', ...require('../utils/http').safeError(error) });
   }
 };
 
@@ -271,19 +280,20 @@ exports.deletePage = async (req, res) => {
     await page.destroy();
     res.status(200).json({ message: 'Page deleted' });
   } catch (error) {
-    res.status(500).json({ message: 'Error deleting page', error: error.message });
+    res.status(500).json({ message: 'Error deleting page', ...require('../utils/http').safeError(error) });
   }
 };
 
 exports.createSection = async (req, res) => {
   try {
+    const { id, createdAt, updatedAt, pageId, ...sectionBody } = req.body || {};
     const section = await WebsiteSection.create({
-      ...req.body,
+      ...sectionBody,
       pageId: req.params.pageId
     });
     res.status(201).json(section);
   } catch (error) {
-    res.status(500).json({ message: 'Error creating section', error: error.message });
+    res.status(500).json({ message: 'Error creating section', ...require('../utils/http').safeError(error) });
   }
 };
 
@@ -292,10 +302,11 @@ exports.updateSection = async (req, res) => {
     const section = await WebsiteSection.findByPk(req.params.sectionId);
     if (!section) return res.status(404).json({ message: 'Section not found' });
     
-    await section.update(req.body);
+    const { id, createdAt, updatedAt, pageId, ...sectionUpdates } = req.body || {};
+    await section.update(sectionUpdates);
     res.status(200).json(section);
   } catch (error) {
-    res.status(500).json({ message: 'Error updating section', error: error.message });
+    res.status(500).json({ message: 'Error updating section', ...require('../utils/http').safeError(error) });
   }
 };
 
@@ -307,21 +318,52 @@ exports.deleteSection = async (req, res) => {
     await section.destroy();
     res.status(200).json({ message: 'Section deleted' });
   } catch (error) {
-    res.status(500).json({ message: 'Error deleting section', error: error.message });
+    res.status(500).json({ message: 'Error deleting section', ...require('../utils/http').safeError(error) });
   }
 };
 
 exports.reorderSections = async (req, res) => {
   try {
-    const { sections } = req.body;
-    
-    for (const { id, order } of sections) {
-      await WebsiteSection.update({ order }, { where: { id } });
+    const { websiteId, sections } = req.body;
+
+    // QA hardening 2026-09-18: sections must belong to the stated website
+    // (previously any site's sections could be reordered) and input must be
+    // a well-formed array.
+    if (!websiteId) {
+      return res.status(400).json({ message: 'websiteId is required' });
     }
-    
+    if (!Array.isArray(sections) || sections.length === 0 || sections.length > 200) {
+      return res.status(400).json({ message: 'sections must be a non-empty array (max 200)' });
+    }
+    for (const s of sections) {
+      if (!s || !s.id || !Number.isFinite(Number(s.order))) {
+        return res.status(400).json({ message: 'Each section needs an id and numeric order' });
+      }
+    }
+
+    // Sections hang off pages (pageId → WebsitePage.websiteId); verify every
+    // section belongs to the stated website before touching any row.
+    const { WebsitePage } = require('../models/associations');
+    const ids = sections.map((s) => s.id);
+    const rows = await WebsiteSection.findAll({
+      where: { id: ids },
+      include: [{ model: WebsitePage, attributes: ['websiteId'] }]
+    });
+    if (rows.length !== ids.length) {
+      return res.status(400).json({ message: 'One or more sections do not exist' });
+    }
+    const foreign = rows.filter((r) => String(r.WebsitePage?.websiteId || r.page?.websiteId || '') !== String(websiteId));
+    if (foreign.length > 0) {
+      return res.status(403).json({ message: 'Sections must belong to the stated website' });
+    }
+
+    for (const { id, order } of sections) {
+      await WebsiteSection.update({ order: Number(order) }, { where: { id } });
+    }
+
     res.status(200).json({ message: 'Sections reordered' });
   } catch (error) {
-    res.status(500).json({ message: 'Error reordering sections', error: error.message });
+    res.status(500).json({ message: 'Error reordering sections', ...require('../utils/http').safeError(error) });
   }
 };
 
@@ -341,16 +383,17 @@ exports.getComponentTemplates = async (req, res) => {
     
     res.status(200).json(templates);
   } catch (error) {
-    res.status(500).json({ message: 'Error fetching templates', error: error.message });
+    res.status(500).json({ message: 'Error fetching templates', ...require('../utils/http').safeError(error) });
   }
 };
 
 exports.createComponentTemplate = async (req, res) => {
   try {
-    const template = await ComponentTemplate.create(req.body);
+    const { id, createdAt, updatedAt, ...templateBody } = req.body || {};
+    const template = await ComponentTemplate.create(templateBody);
     res.status(201).json(template);
   } catch (error) {
-    res.status(500).json({ message: 'Error creating template', error: error.message });
+    res.status(500).json({ message: 'Error creating template', ...require('../utils/http').safeError(error) });
   }
 };
 
@@ -373,7 +416,7 @@ exports.getDataSources = async (req, res) => {
       res.status(200).json(dataSources);
     }
   } catch (error) {
-    res.status(500).json({ message: 'Error fetching data sources', error: error.message });
+    res.status(500).json({ message: 'Error fetching data sources', ...require('../utils/http').safeError(error) });
   }
 };
 
@@ -662,7 +705,7 @@ Generate: 1. Homepage hero title and subtitle 2. About section content 3. SEO ti
       template: selectedTemplate.name
     });
   } catch (error) {
-    res.status(500).json({ message: 'Error generating website', error: error.message });
+    res.status(500).json({ message: 'Error generating website', ...require('../utils/http').safeError(error) });
   }
 };
 
@@ -790,12 +833,15 @@ exports.exportWebsite = async (req, res) => {
     }
     
     const html = generateStaticHTML(exportData);
-    
+
+    // QA hardening 2026-09-18: sanitize the download filename (slug is
+    // allowlisted at create, but legacy rows may predate the rule).
+    const safeSlug = SLUG_RE.test(website.slug || '') ? website.slug : 'website';
     res.setHeader('Content-Type', 'text/html');
-    res.setHeader('Content-Disposition', `attachment; filename="${website.slug}.html"`);
+    res.setHeader('Content-Disposition', `attachment; filename="${safeSlug}.html"`);
     res.status(200).send(html);
   } catch (error) {
-    res.status(500).json({ message: 'Error exporting website', error: error.message });
+    res.status(500).json({ message: 'Error exporting website', ...require('../utils/http').safeError(error) });
   }
 };
 
@@ -830,7 +876,20 @@ exports.linkProperties = async (req, res) => {
   try {
     const { websiteId } = req.params;
     const { propertyIds, featuredIds } = req.body;
-    
+
+    // QA hardening 2026-09-18: validate before the destructive wipe.
+    if (!Array.isArray(propertyIds) || propertyIds.length > 500) {
+      return res.status(400).json({ message: 'propertyIds must be an array (max 500)' });
+    }
+    const website = await Website.findByPk(websiteId, { attributes: ['id'] });
+    if (!website) return res.status(404).json({ message: 'Website not found' });
+    if (propertyIds.length > 0) {
+      const found = await Property.count({ where: { id: propertyIds } });
+      if (found !== propertyIds.length) {
+        return res.status(400).json({ message: 'One or more properties do not exist' });
+      }
+    }
+
     await WebsiteProperty.destroy({ where: { websiteId } });
     
     const links = [];
@@ -847,7 +906,7 @@ exports.linkProperties = async (req, res) => {
     
     res.status(200).json({ message: 'Properties linked successfully', count: links.length });
   } catch (error) {
-    res.status(500).json({ message: 'Error linking properties', error: error.message });
+    res.status(500).json({ message: 'Error linking properties', ...require('../utils/http').safeError(error) });
   }
 };
 
@@ -867,6 +926,6 @@ exports.getWebsiteProperties = async (req, res) => {
     
     res.status(200).json(properties);
   } catch (error) {
-    res.status(500).json({ message: 'Error fetching website properties', error: error.message });
+    res.status(500).json({ message: 'Error fetching website properties', ...require('../utils/http').safeError(error) });
   }
 };

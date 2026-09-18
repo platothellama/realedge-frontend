@@ -27,6 +27,7 @@ const EmailTracking = require('./emailTracking');
 const Payment = require('./payment');
 const PaymentPlan = require('./paymentPlan');
 const Seller = require('./seller');
+const Project = require('./project');
 const UserGroup = require('./userGroup');
 const Role = require('./role');
 const Permission = require('./permission');
@@ -79,6 +80,10 @@ Group.hasMany(Property, { foreignKey: 'assignedToGroupId', as: 'properties' });
 // Property - Seller Relation
 Property.belongsTo(Seller, { foreignKey: 'sellerId', as: 'seller' });
 Seller.hasMany(Property, { foreignKey: 'sellerId', as: 'properties' });
+
+// Property - Project Relation (optional grouping: units in same building/project)
+Property.belongsTo(Project, { foreignKey: 'projectId', as: 'project' });
+Project.hasMany(Property, { foreignKey: 'projectId', as: 'properties' });
 
 // Lead - Group Relation
 Lead.belongsTo(Group, { foreignKey: 'groupId', as: 'group' });
@@ -357,6 +362,7 @@ module.exports = {
   Payment,
   PaymentPlan,
   Seller,
+  Project,
   ListingMethod,
   ListingMethodHistory,
   UserGroup,

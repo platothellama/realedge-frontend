@@ -8,6 +8,14 @@ const openai = new OpenAI({
 let localEmbedder = null;
 let embeddingCache = new Map();
 
+// QA hardening 2026-09-18: preferences carry client PII — owner or admin.
+function canAccessPreference(preference, user) {
+  if (!preference || !user) return false;
+  const role = user.role;
+  if (role === 'Super Admin' || role === 'Admin') return true;
+  return String(preference.agentId) === String(user.id);
+}
+
 const SYNONYMS = {
   'flat': 'apartment',
   'suite': 'apartment',
@@ -257,7 +265,14 @@ const buildBuyerText = (preference) => {
 
 exports.getAllBuyerPreferences = async (req, res) => {
   try {
+    // QA hardening 2026-09-18: agents see their own book; admins see all.
+    const where = {};
+    const role = req.user?.role;
+    if (role !== 'Super Admin' && role !== 'Admin') {
+      where.agentId = req.user.id;
+    }
     const preferences = await BuyerPreference.findAll({
+      where,
       include: [
         { model: User, as: 'agent', attributes: ['id', 'name', 'email'] },
         { model: Lead, as: 'lead', attributes: ['id', 'name', 'email', 'phone', 'status'] }
@@ -266,7 +281,7 @@ exports.getAllBuyerPreferences = async (req, res) => {
     });
     res.status(200).json(preferences);
   } catch (error) {
-    res.status(500).json({ message: 'Error fetching buyer preferences', error: error.message });
+    res.status(500).json({ message: 'Error fetching buyer preferences', ...require('../utils/http').safeError(error) });
   }
 };
 
@@ -281,7 +296,7 @@ exports.getAvailableLeads = async (req, res) => {
     });
     res.status(200).json(leads);
   } catch (error) {
-    res.status(500).json({ message: 'Error fetching leads', error: error.message });
+    res.status(500).json({ message: 'Error fetching leads', ...require('../utils/http').safeError(error) });
   }
 };
 
@@ -294,9 +309,12 @@ exports.getBuyerPreferenceById = async (req, res) => {
       ]
     });
     if (!preference) return res.status(404).json({ message: 'Buyer preference not found' });
+    if (!canAccessPreference(preference, req.user)) {
+      return res.status(403).json({ message: 'Access denied' });
+    }
     res.status(200).json(preference);
   } catch (error) {
-    res.status(500).json({ message: 'Error fetching buyer preference', error: error.message });
+    res.status(500).json({ message: 'Error fetching buyer preference', ...require('../utils/http').safeError(error) });
   }
 };
 
@@ -335,7 +353,7 @@ exports.createBuyerPreference = async (req, res) => {
     
     res.status(201).json(preferenceWithLead);
   } catch (error) {
-    res.status(500).json({ message: 'Error creating buyer preference', error: error.message });
+    res.status(500).json({ message: 'Error creating buyer preference', ...require('../utils/http').safeError(error) });
   }
 };
 
@@ -343,8 +361,16 @@ exports.updateBuyerPreference = async (req, res) => {
   try {
     const preference = await BuyerPreference.findByPk(req.params.id);
     if (!preference) return res.status(404).json({ message: 'Buyer preference not found' });
-    
+    if (!canAccessPreference(preference, req.user)) {
+      return res.status(403).json({ message: 'Access denied' });
+    }
+
     const { leadId, createNewLead, newLeadData, ...updateData } = req.body;
+    // QA hardening 2026-09-18: ownership + server-managed match metadata
+    // are never client-settable.
+    delete updateData.agentId;
+    delete updateData.matchCount;
+    delete updateData.lastMatchedAt;
     
     if (leadId !== undefined || createNewLead) {
       if (createNewLead && newLeadData) {
@@ -375,7 +401,7 @@ exports.updateBuyerPreference = async (req, res) => {
     
     res.status(200).json(updatedPreference);
   } catch (error) {
-    res.status(500).json({ message: 'Error updating buyer preference', error: error.message });
+    res.status(500).json({ message: 'Error updating buyer preference', ...require('../utils/http').safeError(error) });
   }
 };
 
@@ -383,11 +409,14 @@ exports.deleteBuyerPreference = async (req, res) => {
   try {
     const preference = await BuyerPreference.findByPk(req.params.id);
     if (!preference) return res.status(404).json({ message: 'Buyer preference not found' });
-    
+    if (!canAccessPreference(preference, req.user)) {
+      return res.status(403).json({ message: 'Access denied' });
+    }
+
     await preference.destroy();
     res.status(200).json({ message: 'Buyer preference deleted successfully' });
   } catch (error) {
-    res.status(500).json({ message: 'Error deleting buyer preference', error: error.message });
+    res.status(500).json({ message: 'Error deleting buyer preference', ...require('../utils/http').safeError(error) });
   }
 };
 
@@ -395,9 +424,12 @@ exports.matchPropertiesToBuyer = async (req, res) => {
   try {
     const { id } = req.params;
     const preference = await BuyerPreference.findByPk(id);
-    
+
     if (!preference) {
       return res.status(404).json({ message: 'Buyer preference not found' });
+    }
+    if (!canAccessPreference(preference, req.user)) {
+      return res.status(403).json({ message: 'Access denied' });
     }
 
     const { Op } = require('sequelize');
@@ -649,7 +681,7 @@ Provide a brief explanation of why these properties are good matches.`
       aiExplanation
     });
   } catch (error) {
-    res.status(500).json({ message: 'Error matching properties', error: error.message });
+    res.status(500).json({ message: 'Error matching properties', ...require('../utils/http').safeError(error) });
   }
 };
 
@@ -770,7 +802,7 @@ exports.naturalLanguageSearch = async (req, res) => {
       totalFound: properties.length
     });
   } catch (error) {
-    res.status(500).json({ message: 'Error in natural language search', error: error.message });
+    res.status(500).json({ message: 'Error in natural language search', ...require('../utils/http').safeError(error) });
   }
 };
 
@@ -780,8 +812,10 @@ exports.generatePropertyEmbeddings = async (req, res) => {
 
     let properties;
     if (propertyIds?.length > 0) {
+      // QA hardening 2026-09-18: bound per-call OpenAI spend.
+      const capped = propertyIds.slice(0, 200);
       properties = await Property.findAll({
-        where: { id: { [require('sequelize').Op.in]: propertyIds } }
+        where: { id: { [require('sequelize').Op.in]: capped } }
       });
     } else {
       properties = await Property.findAll({ where: { status: 'Available' } });
@@ -827,7 +861,7 @@ exports.generatePropertyEmbeddings = async (req, res) => {
       results
     });
   } catch (error) {
-    res.status(500).json({ message: 'Error generating embeddings', error: error.message });
+    res.status(500).json({ message: 'Error generating embeddings', ...require('../utils/http').safeError(error) });
   }
 };
 
@@ -844,6 +878,9 @@ exports.explainMatch = async (req, res) => {
 
     if (!preference || !property) {
       return res.status(404).json({ message: 'Preference or property not found' });
+    }
+    if (!canAccessPreference(preference, req.user)) {
+      return res.status(403).json({ message: 'Access denied' });
     }
 
     let explanation = '';
@@ -884,7 +921,7 @@ Explain why this property is a good match.`
 
     res.status(200).json({ explanation });
   } catch (error) {
-    res.status(500).json({ message: 'Error explaining match', error: error.message });
+    res.status(500).json({ message: 'Error explaining match', ...require('../utils/http').safeError(error) });
   }
 };
 
@@ -917,9 +954,12 @@ exports.wizardSearch = async (req, res) => {
     const filters = req.body;
     
     const preference = await BuyerPreference.findByPk(id);
-    
+
     if (!preference) {
       return res.status(404).json({ message: 'Buyer preference not found' });
+    }
+    if (!canAccessPreference(preference, req.user)) {
+      return res.status(403).json({ message: 'Access denied' });
     }
 
     const { Op } = require('sequelize');
@@ -1095,6 +1135,6 @@ exports.wizardSearch = async (req, res) => {
       totalFound: properties.length
     });
   } catch (error) {
-    res.status(500).json({ message: 'Error in wizard search', error: error.message });
+    res.status(500).json({ message: 'Error in wizard search', ...require('../utils/http').safeError(error) });
   }
 };

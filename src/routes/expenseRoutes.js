@@ -4,6 +4,9 @@ const expenseController = require('../controllers/expenseController');
 const { protect, restrictTo } = require('../middleware/authMiddleware');
 
 router.use(protect);
+// QA 2026-09-18: finance-only surface (mirrors the frontend route gate).
+// Previously any authenticated role could read/mutate anyone's expenses.
+router.use(restrictTo('Super Admin', 'Admin', 'Accountant'));
 
 router.get('/', expenseController.getExpenses);
 // PHASE 1: static paths before parametric ones (see invoiceRoutes).

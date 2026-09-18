@@ -18,7 +18,7 @@ exports.getAuditLogs = async (req, res) => {
 
     res.status(200).json(logs);
   } catch (error) {
-    res.status(500).json({ message: 'Error fetching audit logs', error: error.message });
+    res.status(500).json({ message: 'Error fetching audit logs', ...require('../utils/http').safeError(error) });
   }
 };
 
@@ -32,7 +32,7 @@ exports.createAuditLog = async (req, res) => {
     });
     res.status(201).json(log);
   } catch (error) {
-    res.status(400).json({ message: 'Error creating audit log', error: error.message });
+    res.status(400).json({ message: 'Error creating audit log', ...require('../utils/http').safeError(error) });
   }
 };
 
@@ -69,6 +69,6 @@ exports.getAuditStats = async (req, res) => {
       byEntity: byEntity.map(e => ({ entity: e.entityType, count: Number(e.dataValues.count) }))
     });
   } catch (error) {
-    res.status(500).json({ message: 'Error fetching audit stats', error: error.message });
+    res.status(500).json({ message: 'Error fetching audit stats', ...require('../utils/http').safeError(error) });
   }
 };

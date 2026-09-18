@@ -1,4 +1,5 @@
 const { Expense, Property } = require('../models/associations');
+const { Op } = require('sequelize');
 
 exports.getExpenses = async (req, res) => {
   try {
@@ -9,7 +10,7 @@ exports.getExpenses = async (req, res) => {
     if (status) where.status = status;
     if (startDate && endDate) {
       where.date = {
-        between: [new Date(startDate), new Date(endDate)]
+        [Op.between]: [new Date(startDate), new Date(endDate)]
       };
     }
 
@@ -21,16 +22,29 @@ exports.getExpenses = async (req, res) => {
 
     res.status(200).json(expenses);
   } catch (error) {
-    res.status(500).json({ message: 'Error fetching expenses', error: error.message });
+    res.status(500).json({ message: 'Error fetching expenses', ...require('../utils/http').safeError(error) });
   }
 };
 
 exports.createExpense = async (req, res) => {
   try {
-    const expense = await Expense.create({ ...req.body, createdByUserId: req.user ? req.user.id : null });
+    // QA hardening 2026-09-18: expenses are born Pending; Approved/Paid must
+    // come from the approve / mark-paid flows (self-approval at creation
+    // bypassed the Accountant/Admin gate).
+    const { status, id, createdByUserId, ...body } = req.body || {};
+    // QA hardening 2026-09-18: amounts are finite positives (negative/NaN
+    // expenses previously persisted and poisoned sums).
+    if (body.amount !== undefined) {
+      const amt = Number(body.amount);
+      if (!Number.isFinite(amt) || amt <= 0) {
+        return res.status(400).json({ message: 'Expense amount must be a positive number' });
+      }
+      body.amount = amt;
+    }
+    const expense = await Expense.create({ ...body, status: 'Pending', createdByUserId: req.user ? req.user.id : null });
     res.status(201).json(expense);
   } catch (error) {
-    res.status(500).json({ message: 'Error creating expense', error: error.message });
+    res.status(500).json({ message: 'Error creating expense', ...require('../utils/http').safeError(error) });
   }
 };
 
@@ -39,10 +53,24 @@ exports.updateExpense = async (req, res) => {
     const expense = await Expense.findByPk(req.params.id);
     if (!expense) return res.status(404).json({ message: 'Expense not found' });
 
-    await expense.update(req.body);
+    // QA hardening 2026-09-18: 'Approved' must go through
+    // PATCH /:id/approve (Accountant/Admin). Other transitions (e.g. the
+    // mark-as-paid UI flow) stay on this endpoint.
+    const { status, id, createdByUserId, ...updatable } = req.body || {};
+    if (status === 'Approved') {
+      return res.status(403).json({ message: 'Approval requires the approve endpoint (Accountant/Admin).' });
+    }
+    if (updatable.amount !== undefined) {
+      const amt = Number(updatable.amount);
+      if (!Number.isFinite(amt) || amt <= 0) {
+        return res.status(400).json({ message: 'Expense amount must be a positive number' });
+      }
+      updatable.amount = amt;
+    }
+    await expense.update(status === undefined ? updatable : { ...updatable, status });
     res.status(200).json(expense);
   } catch (error) {
-    res.status(500).json({ message: 'Error updating expense', error: error.message });
+    res.status(500).json({ message: 'Error updating expense', ...require('../utils/http').safeError(error) });
   }
 };
 
@@ -54,7 +82,7 @@ exports.approveExpense = async (req, res) => {
     await expense.update({ status: 'Approved' });
     res.status(200).json(expense);
   } catch (error) {
-    res.status(500).json({ message: 'Error approving expense', error: error.message });
+    res.status(500).json({ message: 'Error approving expense', ...require('../utils/http').safeError(error) });
   }
 };
 
@@ -72,7 +100,7 @@ exports.deleteExpense = async (req, res) => {
     await expense.destroy();
     res.status(200).json({ message: 'Expense deleted' });
   } catch (error) {
-    res.status(500).json({ message: 'Error deleting expense', error: error.message });
+    res.status(500).json({ message: 'Error deleting expense', ...require('../utils/http').safeError(error) });
   }
 };
 
@@ -136,6 +164,6 @@ exports.getExpenseStats = async (req, res) => {
       monthlyExpenses
     });
   } catch (error) {
-    res.status(500).json({ message: 'Error fetching expense stats', error: error.message });
+    res.status(500).json({ message: 'Error fetching expense stats', ...require('../utils/http').safeError(error) });
   }
 };

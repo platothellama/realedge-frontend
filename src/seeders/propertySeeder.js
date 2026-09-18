@@ -275,6 +275,7 @@ const seedProperties = async (count = 100) => {
         status: status,
         type: type,
         bedrooms: bedrooms,
+        masterBedrooms: bedrooms > 0 ? Math.min(bedrooms, Math.random() > 0.4 ? 1 + Math.floor(Math.random() * 2) : 0) : 0,
         bathrooms: bathrooms,
         area: area,
         lotSize: type === 'Villa' || type === 'House' ? area * (2 + Math.random() * 2) : 0,

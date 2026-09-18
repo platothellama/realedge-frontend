@@ -1,5 +1,6 @@
 const { User, Group } = require('../models/associations');
 const { Op } = require('sequelize');
+const { safeError } = require('../utils/http');
 
 // PHASE 2 (D20): hierarchy Super Admin > Admin > Office Manager > Broker >
 // everyone else. Users may manage only strictly-lower roles; OM cannot touch
@@ -26,7 +27,7 @@ exports.getAllUsers = async (req, res) => {
     });
     res.status(200).json({ status: 'success', data: users });
   } catch (error) {
-    res.status(500).json({ status: 'error', message: error.message });
+    res.status(500).json({ status: 'error', message: 'Error fetching users', ...safeError(error) });
   }
 };
 
@@ -39,7 +40,7 @@ exports.getUser = async (req, res) => {
     if (!user) return res.status(404).json({ status: 'fail', message: 'User not found' });
     res.status(200).json({ status: 'success', data: user });
   } catch (error) {
-    res.status(500).json({ status: 'error', message: error.message });
+    res.status(500).json({ status: 'error', message: 'Error fetching user', ...safeError(error) });
   }
 };
 
@@ -70,7 +71,7 @@ exports.createUser = async (req, res) => {
 
     res.status(201).json({ status: 'success', data: result });
   } catch (error) {
-    res.status(400).json({ status: 'fail', message: error.message });
+    res.status(400).json({ status: 'fail', message: 'Error creating user', ...safeError(error) });
   }
 };
 
@@ -118,7 +119,7 @@ exports.updateUser = async (req, res) => {
 
     res.status(200).json({ status: 'success', data: result });
   } catch (error) {
-    res.status(400).json({ status: 'fail', message: error.message });
+    res.status(400).json({ status: 'fail', message: 'Error updating user', ...safeError(error) });
   }
 };
 
@@ -143,7 +144,7 @@ exports.deleteUser = async (req, res) => {
     await user.destroy();
     res.status(200).json({ status: 'success', message: 'User deleted successfully' });
   } catch (error) {
-    res.status(500).json({ status: 'error', message: error.message });
+    res.status(500).json({ status: 'error', message: 'Error deleting user', ...safeError(error) });
   }
 };
 
@@ -166,6 +167,6 @@ exports.toggleUserStatus = async (req, res) => {
       message: `User has been ${user.active ? 'activated' : 'blocked'}.` 
     });
   } catch (error) {
-    res.status(500).json({ status: 'error', message: error.message });
+    res.status(500).json({ status: 'error', message: 'Error updating user status', ...safeError(error) });
   }
 };
