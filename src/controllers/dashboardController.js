@@ -409,7 +409,9 @@ function getTypeColor(type) {
     'Villa': '#8b5cf6',
     'Office': '#f59e0b',
     'Land': '#ef4444',
-    'Commercial': '#06b6d4'
+    'Commercial': '#06b6d4',
+    'Duplex': '#ec4899',
+    'Triplex': '#14b8a6'
   };
   return colors[type] || '#64748b';
 }

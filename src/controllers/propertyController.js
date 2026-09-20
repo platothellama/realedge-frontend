@@ -349,7 +349,8 @@ exports.getPropertyById = async (req, res) => {
         { model: User, as: 'assignedUser', attributes: ['id', 'name', 'email'] },
         { model: Group, as: 'assignedGroup', attributes: ['id', 'name'] },
         { model: Seller, as: 'seller', attributes: ['id', 'name', 'email', 'phone'] },
-        { model: Project, as: 'project', attributes: ['id', 'name', 'developer', 'city', 'address', 'status'] }
+        { model: Project, as: 'project', attributes: ['id', 'name', 'developer', 'city', 'address', 'status'] },
+        { model: Lead, as: 'interestedLeads', attributes: ['id', 'name', 'email', 'phone', 'status'], through: { attributes: [] } }
       ]
     });
     if (!property) return res.status(404).json({ message: 'Property not found' });

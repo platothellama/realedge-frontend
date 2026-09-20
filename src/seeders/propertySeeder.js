@@ -24,7 +24,7 @@ const neighborhoods = {
   'Nabatieh': ['Nabatieh Center', 'Houla', 'Qantara', 'Jezzine']
 };
 
-const propertyTypes = ['Apartment', 'House', 'Villa', 'Office', 'Land', 'Commercial'];
+const propertyTypes = ['Apartment', 'House', 'Villa', 'Office', 'Land', 'Commercial', 'Duplex', 'Triplex'];
 
 const featuresList = [
   'Balcony', 'Sea View', 'Mountain View', 'Garden', 'Swimming Pool', 'Parking', 
@@ -76,6 +76,20 @@ const descriptions = {
     'Strategic {type} location in the heart of {neighborhood}\'s commercial district with parking.',
     'Modern commercial unit with professional finish, ideal for showroom, office, or retail.',
     'Prime commercial opportunity in a growing area, suitable for various business ventures.'
+  ],
+  'Duplex': [
+    'Spacious {bedrooms} bedroom duplex with two-level living, modern finishes and private entrance in {neighborhood}.',
+    'Well-designed {bedrooms} bedroom duplex offering flexible family living with separate living and sleeping floors.',
+    'Bright {bedrooms} bedroom duplex featuring open-plan ground floor, generous bedrooms upstairs and outdoor space.',
+    'Modern {bedrooms} bedroom duplex in a sought-after {neighborhood} location, ideal for families seeking extra space.',
+    'Elegant {bedrooms} bedroom duplex combining privacy and comfort with two floors of versatile living space.'
+  ],
+  'Triplex': [
+    'Impressive {bedrooms} bedroom triplex spread over three floors, offering luxury living and panoramic views in {neighborhood}.',
+    'Generous {bedrooms} bedroom triplex with spacious reception areas, private bedrooms and rooftop terrace potential.',
+    'Prestigious {bedrooms} bedroom triplex featuring three levels of refined interiors in the heart of {neighborhood}.',
+    'Exceptional {bedrooms} bedroom triplex ideal for large families, with flexible layouts across three floors.',
+    'Stunning {bedrooms} bedroom triplex offering maximum space, privacy and premium finishes throughout.'
   ]
 };
 
@@ -121,7 +135,9 @@ const generatePrice = (type, bedrooms, area, city) => {
     'Apartment': 1800,
     'Office': 1500,
     'Commercial': 2500,
-    'Land': 800
+    'Land': 800,
+    'Duplex': 2100,
+    'Triplex': 2400
   };
   
   const cityMultipliers = {
@@ -159,7 +175,9 @@ const generateArea = (type) => {
     'Villa': { min: 400, max: 1200 },
     'Office': { min: 50, max: 500 },
     'Commercial': { min: 100, max: 800 },
-    'Land': { min: 500, max: 5000 }
+    'Land': { min: 500, max: 5000 },
+    'Duplex': { min: 150, max: 500 },
+    'Triplex': { min: 220, max: 700 }
   };
   
   const range = ranges[type] || { min: 100, max: 500 };
@@ -173,7 +191,9 @@ const generateBedrooms = (type) => {
     'Villa': [3, 4, 5, 6, 7],
     'Office': [0, 0, 0, 0],
     'Commercial': [0, 0, 0],
-    'Land': [0, 0]
+    'Land': [0, 0],
+    'Duplex': [2, 3, 4, 5],
+    'Triplex': [3, 4, 5, 6]
   };
   return getRandomElement(counts[type] || [1, 2, 3]);
 };
@@ -224,7 +244,7 @@ const generateFeatures = (type, bedrooms, hasPool = false) => {
   if (type !== 'Land' && Math.random() > 0.6) {
     features.push('Elevator');
   }
-  if (type === 'Villa' || type === 'House') {
+  if (type === 'Villa' || type === 'House' || type === 'Duplex' || type === 'Triplex') {
     if (Math.random() > 0.5) features.push('Garden');
     if (hasPool) features.push('Swimming Pool');
     if (Math.random() > 0.6) features.push('Maid\'s Room');
@@ -281,7 +301,7 @@ const seedProperties = async (count = 100) => {
         bathrooms: bathrooms,
         balconies: balconies,
         area: area,
-        lotSize: type === 'Villa' || type === 'House' ? area * (2 + Math.random() * 2) : 0,
+        lotSize: type === 'Villa' || type === 'House' || type === 'Duplex' || type === 'Triplex' ? area * (2 + Math.random() * 2) : 0,
         yearBuilt: yearBuilt,
         parkingSpaces: parkingSpaces,
         address: `${Math.floor(Math.random() * 200) + 1}, ${neighborhood}`,

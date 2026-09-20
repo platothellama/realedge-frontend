@@ -14,5 +14,7 @@ router.post('/bulk', leadController.bulkCreateLeads);
 router.put('/:id', leadController.updateLead);
 router.delete('/:id', leadController.deleteLead);
 router.post('/:id/convert-to-deal', leadController.convertToDeal);
+router.post('/:id/properties', leadController.addLeadProperty);
+router.delete('/:id/properties/:propertyId', leadController.removeLeadProperty);
 
 module.exports = router;

@@ -49,7 +49,7 @@ const Property = sequelize.define('Property', {
     comment: 'Date when property was lost'
   },
   type: {
-    type: DataTypes.ENUM('Apartment', 'House', 'Villa', 'Office', 'Land', 'Commercial'),
+    type: DataTypes.ENUM('Apartment', 'House', 'Villa', 'Office', 'Land', 'Commercial', 'Duplex', 'Triplex'),
     defaultValue: 'Apartment'
   },
   bedrooms: {

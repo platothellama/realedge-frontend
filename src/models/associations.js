@@ -29,6 +29,7 @@ const PaymentPlan = require('./paymentPlan');
 const Seller = require('./seller');
 const Project = require('./project');
 const UserGroup = require('./userGroup');
+const LeadProperty = require('./leadProperty');
 const Role = require('./role');
 const Permission = require('./permission');
 const RolePermission = require('./rolePermission');
@@ -295,6 +296,22 @@ ListingMethodHistory.belongsTo(ListingMethod, { foreignKey: 'listingMethodId', a
 ListingMethodHistory.belongsTo(Property, { foreignKey: 'propertyId', as: 'property' });
 Property.hasMany(ListingMethodHistory, { foreignKey: 'propertyId', as: 'listingHistory' });
 
+// Lead - Property Relation (Many-to-Many: a lead can follow many properties)
+// Join model: LeadProperty. Aliases:
+//   Lead -> interestedProperties, Property -> interestedLeads
+Lead.belongsToMany(Property, {
+  through: LeadProperty,
+  as: 'interestedProperties',
+  foreignKey: 'leadId',
+  otherKey: 'propertyId'
+});
+Property.belongsToMany(Lead, {
+  through: LeadProperty,
+  as: 'interestedLeads',
+  foreignKey: 'propertyId',
+  otherKey: 'leadId'
+});
+
 // ==========================================
 // NEW: UserGroup - User/Group Relations
 // ==========================================
@@ -370,5 +387,6 @@ module.exports = {
   Permission,
   RolePermission,
   DealCommission,
-  SystemSetting
+  SystemSetting,
+  LeadProperty
 };

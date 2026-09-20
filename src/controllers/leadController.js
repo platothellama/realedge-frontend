@@ -1,4 +1,38 @@
-const { Lead, PriceHistory, Property, User, Visit, Deal, Task, Group } = require('../models/associations');
+const { Lead, PriceHistory, Property, User, Visit, Deal, Task, Group, LeadProperty } = require('../models/associations');
+
+const INTERESTED_PROPERTY_ATTRS = ['id', 'title', 'address', 'city', 'price', 'status', 'type'];
+
+function extractPropertyIds(body) {
+  if (!body || typeof body !== 'object') return [];
+  const raw = body.propertyIds ?? body.interestedPropertyIds ?? body.interestedProperties;
+  const ids = new Set();
+  const push = (v) => {
+    if (typeof v === 'string' && v.trim()) ids.add(v.trim());
+    else if (v && typeof v === 'object' && typeof v.id === 'string' && v.id.trim()) ids.add(v.id.trim());
+  };
+  if (typeof body.propertyId === 'string' && body.propertyId.trim()) ids.add(body.propertyId.trim());
+  if (Array.isArray(raw)) raw.forEach(push);
+  else if (typeof raw === 'string' && raw.trim()) push(raw);
+  return [...ids];
+}
+
+async function ensurePropertiesExist(propertyIds) {
+  if (propertyIds.length === 0) return;
+  const found = await Property.findAll({ where: { id: propertyIds }, attributes: ['id'] });
+  const foundIds = new Set(found.map((p) => p.id));
+  const missing = propertyIds.filter((id) => !foundIds.has(id));
+  if (missing.length > 0) {
+    const err = new Error(`Properties not found: ${missing.join(', ')}`);
+    err.status = 404;
+    throw err;
+  }
+}
+
+async function linkLeadProperties(leadId, propertyIds, transaction) {
+  if (propertyIds.length === 0) return;
+  const rows = propertyIds.map((propertyId) => ({ leadId, propertyId }));
+  await LeadProperty.bulkCreate(rows, { transaction, ignoreDuplicates: true });
+}
 
 exports.convertToDeal = async (req, res) => {
   try {
@@ -121,6 +155,12 @@ exports.getAllLeads = async (req, res) => {
           include: [{ model: Property, attributes: ['id', 'title'] }]
         },
         {
+          model: Property,
+          as: 'interestedProperties',
+          attributes: INTERESTED_PROPERTY_ATTRS,
+          through: { attributes: [] }
+        },
+        {
           model: User,
           as: 'assignedUser',
           attributes: ['id', 'name', 'photo']
@@ -171,6 +211,12 @@ exports.getLeadById = async (req, res) => {
           include: [{ model: Property, attributes: ['id', 'title'] }]
         },
         {
+          model: Property,
+          as: 'interestedProperties',
+          attributes: INTERESTED_PROPERTY_ATTRS,
+          through: { attributes: [] }
+        },
+        {
           model: User,
           as: 'assignedUser',
           attributes: ['id', 'name', 'photo']
@@ -215,7 +261,7 @@ exports.createLead = async (req, res) => {
   try {
     // QA hardening 2026-09-18: leads are born New Lead, owned by their
     // creator (assignment UI is Super-Admin-only); score is AI-managed.
-    const { assignedToUserId, status, score, id, createdAt, updatedAt, ...body } = req.body || {};
+    const { assignedToUserId, status, score, id, createdAt, updatedAt, propertyId, propertyIds, interestedPropertyIds, interestedProperties, ...body } = req.body || {};
     const leadData = { ...body };
     const role = req.user?.role;
     if (role !== 'Super Admin' && role !== 'Admin') {
@@ -227,9 +273,27 @@ exports.createLead = async (req, res) => {
     }
     leadData.status = 'New Lead';
 
-    const lead = await Lead.create(leadData);
-    res.status(201).json(lead);
+    const wantedPropertyIds = extractPropertyIds({ propertyId, propertyIds, interestedPropertyIds, interestedProperties });
+    await ensurePropertiesExist(wantedPropertyIds);
+
+    const { sequelize } = require('../config/database');
+    const transaction = await sequelize.transaction();
+    try {
+      const lead = await Lead.create(leadData, { transaction });
+      await linkLeadProperties(lead.id, wantedPropertyIds, transaction);
+      await transaction.commit();
+      const created = await Lead.findByPk(lead.id, {
+        include: [{ model: Property, as: 'interestedProperties', attributes: INTERESTED_PROPERTY_ATTRS, through: { attributes: [] } }]
+      });
+      return res.status(201).json(created || lead);
+    } catch (txError) {
+      try { await transaction.rollback(); } catch (_) {}
+      throw txError;
+    }
   } catch (error) {
+    if (error.status === 404) {
+      return res.status(404).json({ message: error.message });
+    }
     if (error.name === 'SequelizeUniqueConstraintError') {
       return res.status(400).json({ message: 'A lead with this email or phone already exists.' });
     }
@@ -252,7 +316,7 @@ exports.updateLead = async (req, res) => {
     // QA hardening 2026-09-18: non-admins cannot reassign leads away or
     // forge the AI-managed score (status workflow stays via this endpoint).
     const updateData = { ...(req.body || {}) };
-    for (const f of ['id', 'createdAt', 'updatedAt']) {
+    for (const f of ['id', 'createdAt', 'updatedAt', 'propertyId', 'propertyIds', 'interestedPropertyIds', 'interestedProperties']) {
       delete updateData[f];
     }
     if (userRole !== 'Super Admin' && userRole !== 'Admin') {
@@ -260,7 +324,36 @@ exports.updateLead = async (req, res) => {
     }
     delete updateData.score;
     await lead.update(updateData);
-    res.status(200).json(lead);
+
+    // Multi-property linking: if the caller sent an explicit array, sync to
+    // exactly that set (supports unchecking in the UI). A lone `propertyId`
+    // only ADDS a link (used when creating from a property page).
+    const wantsSync = Array.isArray(req.body?.propertyIds) || Array.isArray(req.body?.interestedPropertyIds);
+    if (wantsSync) {
+      const wanted = extractPropertyIds(req.body || {});
+      await ensurePropertiesExist(wanted);
+      const existing = await LeadProperty.findAll({ where: { leadId: lead.id }, attributes: ['propertyId'] });
+      const existingIds = new Set(existing.map((r) => r.propertyId));
+      const wantedSet = new Set(wanted);
+      const toRemove = [...existingIds].filter((pid) => !wantedSet.has(pid));
+      const toAdd = wanted.filter((pid) => !existingIds.has(pid));
+      if (toRemove.length > 0) {
+        const { Op } = require('sequelize');
+        await LeadProperty.destroy({ where: { leadId: lead.id, propertyId: { [Op.in]: toRemove } } });
+      }
+      await linkLeadProperties(lead.id, toAdd);
+    } else {
+      const toAdd = extractPropertyIds(req.body || {});
+      if (toAdd.length > 0) {
+        await ensurePropertiesExist(toAdd);
+        await linkLeadProperties(lead.id, toAdd);
+      }
+    }
+
+    const updated = await Lead.findByPk(lead.id, {
+      include: [{ model: Property, as: 'interestedProperties', attributes: INTERESTED_PROPERTY_ATTRS, through: { attributes: [] } }]
+    });
+    res.status(200).json(updated || lead);
   } catch (error) {
     if (error.name === 'SequelizeUniqueConstraintError') {
       return res.status(400).json({ message: 'A lead with this email or phone already exists.' });
@@ -272,6 +365,56 @@ exports.updateLead = async (req, res) => {
 const LEAD_SOURCES = ['Website', 'Facebook', 'Google Ads', 'Referral', 'Walk-in'];
 const LEAD_STATUSES = ['New Lead', 'Contacted', 'Visit Scheduled', 'Negotiation', 'Closed Deal', 'Lost Lead'];
 const MAX_BULK_ROWS = 500;
+
+// Direct lead <-> property links (many-to-many via LeadProperty).
+// POST /leads/:id/properties { propertyId } — idempotent attach.
+exports.addLeadProperty = async (req, res) => {
+  try {
+    const lead = await Lead.findByPk(req.params.id);
+    if (!lead) return res.status(404).json({ message: 'Lead not found' });
+
+    const userRole = req.user.role;
+    const userId = req.user.id;
+    if (userRole !== 'Super Admin' && userRole !== 'Admin' && lead.assignedToUserId !== userId) {
+      return res.status(403).json({ message: 'Access denied: You cannot update a lead that is not assigned to you' });
+    }
+
+    const propertyId = (req.body?.propertyId || '').trim();
+    if (!propertyId) return res.status(400).json({ message: 'propertyId is required' });
+    const property = await Property.findByPk(propertyId, { attributes: ['id'] });
+    if (!property) return res.status(404).json({ message: 'Property not found' });
+
+    await LeadProperty.findOrCreate({ where: { leadId: lead.id, propertyId }, defaults: { leadId: lead.id, propertyId } });
+    const updated = await Lead.findByPk(lead.id, {
+      include: [{ model: Property, as: 'interestedProperties', attributes: INTERESTED_PROPERTY_ATTRS, through: { attributes: [] } }]
+    });
+    res.status(200).json(updated);
+  } catch (error) {
+    res.status(500).json({ message: 'Error linking property', ...require('../utils/http').safeError(error) });
+  }
+};
+
+// DELETE /leads/:id/properties/:propertyId — detach.
+exports.removeLeadProperty = async (req, res) => {
+  try {
+    const lead = await Lead.findByPk(req.params.id);
+    if (!lead) return res.status(404).json({ message: 'Lead not found' });
+
+    const userRole = req.user.role;
+    const userId = req.user.id;
+    if (userRole !== 'Super Admin' && userRole !== 'Admin' && lead.assignedToUserId !== userId) {
+      return res.status(403).json({ message: 'Access denied: You cannot update a lead that is not assigned to you' });
+    }
+
+    await LeadProperty.destroy({ where: { leadId: lead.id, propertyId: req.params.propertyId } });
+    const updated = await Lead.findByPk(lead.id, {
+      include: [{ model: Property, as: 'interestedProperties', attributes: INTERESTED_PROPERTY_ATTRS, through: { attributes: [] } }]
+    });
+    res.status(200).json(updated);
+  } catch (error) {
+    res.status(500).json({ message: 'Error unlinking property', ...require('../utils/http').safeError(error) });
+  }
+};
 
 /**
  * QA hardening 2026-09-18: server-side bulk import (replaces N parallel
