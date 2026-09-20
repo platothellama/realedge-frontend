@@ -130,6 +130,21 @@ const ensureNullability = async () => {
   } catch (err) {
     console.log(`⚠️  Nullability skipped for Payments.amountInUSD: ${err.message}`);
   }
+  // Lead email is optional: widen pre-existing NOT NULL columns.
+  try {
+    const queryInterface = sequelize.getQueryInterface();
+    const tables = await queryInterface.showAllTables();
+    if (!tables.includes('Leads')) return;
+    const [rows] = await sequelize.query(
+      "SELECT IS_NULLABLE FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'Leads' AND COLUMN_NAME = 'email'"
+    );
+    if (rows.length && rows[0].IS_NULLABLE === 'NO') {
+      await sequelize.query('ALTER TABLE `Leads` MODIFY COLUMN `email` VARCHAR(255) NULL');
+      console.log('🔧 Migration: Leads.email is now NULL-able');
+    }
+  } catch (err) {
+    console.log(`⚠️  Nullability skipped for Leads.email: ${err.message}`);
+  }
 };
 
 const ensureTransactionCurrencyEnum = async () => {

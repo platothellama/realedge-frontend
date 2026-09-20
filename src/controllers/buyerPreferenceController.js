@@ -335,8 +335,8 @@ exports.createBuyerPreference = async (req, res) => {
     if (createNewLead && newLeadData) {
       const newLead = await Lead.create({
         name: newLeadData.name,
-        email: newLeadData.email,
-        phone: newLeadData.phone,
+        email: (newLeadData.email || '').trim() || null,
+        phone: (newLeadData.phone || '').trim() || null,
         budget: newLeadData.budget,
         propertyPreferences: newLeadData.propertyPreferences,
         preferredAreas: newLeadData.preferredAreas,
@@ -384,8 +384,8 @@ exports.updateBuyerPreference = async (req, res) => {
       if (createNewLead && newLeadData) {
         const newLead = await Lead.create({
           name: newLeadData.name,
-          email: newLeadData.email,
-          phone: newLeadData.phone,
+          email: (newLeadData.email || '').trim() || null,
+          phone: (newLeadData.phone || '').trim() || null,
           budget: newLeadData.budget,
           propertyPreferences: newLeadData.propertyPreferences,
           preferredAreas: newLeadData.preferredAreas,

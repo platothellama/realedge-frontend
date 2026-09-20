@@ -263,6 +263,10 @@ exports.createLead = async (req, res) => {
     // creator (assignment UI is Super-Admin-only); score is AI-managed.
     const { assignedToUserId, status, score, id, createdAt, updatedAt, propertyId, propertyIds, interestedPropertyIds, interestedProperties, ...body } = req.body || {};
     const leadData = { ...body };
+    // Email is optional: "" / whitespace => null (allowNull skips isEmail,
+    // empty string would fail it). Same for phone to avoid "" unique clashes.
+    if (typeof leadData.email === 'string') leadData.email = leadData.email.trim() || null;
+    if (typeof leadData.phone === 'string') leadData.phone = leadData.phone.trim() || null;
     const role = req.user?.role;
     if (role !== 'Super Admin' && role !== 'Admin') {
       leadData.assignedToUserId = req.user.id;
@@ -319,6 +323,8 @@ exports.updateLead = async (req, res) => {
     for (const f of ['id', 'createdAt', 'updatedAt', 'propertyId', 'propertyIds', 'interestedPropertyIds', 'interestedProperties']) {
       delete updateData[f];
     }
+    if (typeof updateData.email === 'string') updateData.email = updateData.email.trim() || null;
+    if (typeof updateData.phone === 'string') updateData.phone = updateData.phone.trim() || null;
     if (userRole !== 'Super Admin' && userRole !== 'Admin') {
       delete updateData.assignedToUserId;
     }
@@ -441,8 +447,12 @@ exports.bulkCreateLeads = async (req, res) => {
     rows.forEach((r, i) => {
       const name = (r?.name || '').trim();
       const email = (r?.email || '').trim();
-      if (!name || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-        skipped.push({ index: i, reason: 'name and valid email required' });
+      if (!name) {
+        skipped.push({ index: i, reason: 'name is required' });
+        return;
+      }
+      if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        skipped.push({ index: i, reason: 'email is invalid' });
         return;
       }
       const budget = r?.budget === undefined || r?.budget === null || r?.budget === '' ? 0 : Number(r.budget);
@@ -452,7 +462,7 @@ exports.bulkCreateLeads = async (req, res) => {
       }
       valid.push({
         name,
-        email,
+        email: email || null,
         phone: (r?.phone || '').trim() || null,
         source: LEAD_SOURCES.includes(r?.source) ? r.source : 'Website',
         status: 'New Lead',
